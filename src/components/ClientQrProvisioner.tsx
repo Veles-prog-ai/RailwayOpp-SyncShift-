@@ -126,9 +126,15 @@ export const ClientQrProvisioner: React.FC<ClientQrProvisionerProps> = ({
           </p>
         </div>
         <span className="text-xs font-mono text-slate-600">
-          Klijent: {tenantId}
+          Klijent: {tenantId || 'Nije povezan'}
         </span>
       </div>
+
+      {(!tenantId || !pathwayToken || !fleetPassphrase) && (
+        <div className="p-3.5 rounded-lg bg-amber-50 border border-amber-300 text-xs text-amber-900 font-medium">
+          Pre generisanja aktivnog QR koda, povežite Tenant ID i Pathway Token (kroz Početni ekran ili Admin konzolu) i unesite lokalni E2EE ključ flote ispod.
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         {/* Left: Personalization & Local Key Controls */}

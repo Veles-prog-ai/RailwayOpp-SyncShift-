@@ -6,14 +6,21 @@ import React, {
   useRef,
   useState,
 } from 'react';
+import { apiFetch, apiUrl } from './apiClient';
 import { decryptEnvelopePayload, encryptEnvelopePayload } from './crypto';
-import { calculateShiftDurations, evaluateShiftAssignment, hasNightHours } from './ruleEngine';
-import { createSeedState, createTenantNodes } from './seed';
+import {
+  calculateShiftDurations,
+  evaluateShiftAssignment,
+  hasNightHours,
+} from './ruleEngine';
+import { createInitialSystemState, createTenantNodes } from './seed';
 import {
   AiAuditReport,
   AuditLogEntry,
   ClientOperator,
+  CompanyVehicle,
   DispatchMessage,
+  Driver,
   GatewayTelemetrySnapshot,
   NodeLocalData,
   RuleConfig,
@@ -31,14 +38,14 @@ import {
 } from './types';
 
 function mobileStorageKey(tenantId: string) {
-  return `zp_node_mobile_v3_${tenantId}`;
+  return `zp_live_mobile_v1_${tenantId || 'unconfigured'}`;
 }
 
 function officeStorageKey(tenantId: string) {
-  return `zp_node_office_v3_${tenantId}`;
+  return `zp_live_office_v1_${tenantId || 'unconfigured'}`;
 }
 
-const META_STORAGE_KEY = 'zp_ui_meta_v4';
+const META_STORAGE_KEY = 'zp_live_meta_v1';
 
 function uid(prefix: string): string {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
@@ -120,9 +127,9 @@ function loadTenantNodes(tenantId: string): {
       };
     }
   } catch {
-    // fallback to tenant seed
+    // fallback to clean empty nodes
   }
-  return createTenantNodes(tenantId);
+  return createTenantNodes();
 }
 
 function loadInitialState(): SystemState {
@@ -136,32 +143,28 @@ function loadInitialState(): SystemState {
   }
 
   const tenantId =
-    boot.tenant ||
-    (typeof meta.activeTenantId === 'string' ? meta.activeTenantId : 'TENANT-SRB-A');
-  const defaultToken =
-    tenantId === 'TENANT-PRIV-B' ? 'pw_priv_b_38m2q7v5' : 'pw_srb_a_91k4x8m2';
+    boot.tenant || (typeof meta.activeTenantId === 'string' ? meta.activeTenantId : '');
   const pathwayToken =
     boot.pathway ||
     (typeof meta.activePathwayToken === 'string' && !boot.tenant
       ? meta.activePathwayToken
-      : defaultToken);
+      : '');
 
-  const seed = createSeedState(tenantId, pathwayToken);
+  const base = createInitialSystemState(tenantId, pathwayToken);
   const { mobileNode, officeNode } = loadTenantNodes(tenantId);
 
   const resolvedDriverId =
     (boot.driver && mobileNode.drivers.some((d) => d.id === boot.driver)
       ? boot.driver
-      : null) ||
+      : '') ||
     (typeof meta.activeMobileDriverId === 'string' &&
     !boot.tenant &&
     mobileNode.drivers.some((d) => d.id === meta.activeMobileDriverId)
       ? meta.activeMobileDriverId
-      : null) ||
+      : '') ||
     mobileNode.drivers[0]?.id ||
-    seed.activeMobileDriverId;
+    '';
 
-  // Strip sensitive #e2ee fragment from the address bar immediately after local ingestion
   if (typeof window !== 'undefined' && (window.location.hash.includes('e2ee=') || boot.e2ee)) {
     try {
       const cleanUrl = new URL(window.location.href);
@@ -174,6 +177,7 @@ function loadInitialState(): SystemState {
   }
 
   return {
+    ...base,
     activeSegment:
       boot.segment ||
       (meta.activeSegment === 'landing' ||
@@ -185,17 +189,19 @@ function loadInitialState(): SystemState {
     activeTenantId: tenantId,
     activePathwayToken: pathwayToken,
     activeMobileDriverId: resolvedDriverId,
+    desktopStartAccepted: Boolean(meta.desktopStartAccepted),
+    mobileStartAccepted: Boolean(meta.mobileStartAccepted),
     offlineTunnelMode: Boolean(meta.offlineTunnelMode),
     officeOfflineMode: Boolean(meta.officeOfflineMode),
     rollingWindowSize:
       typeof meta.rollingWindowSize === 'number'
         ? meta.rollingWindowSize
-        : seed.rollingWindowSize,
+        : base.rollingWindowSize,
     fleetPassphrase:
       boot.e2ee ||
       (typeof meta.fleetPassphrase === 'string' && !boot.tenant
         ? meta.fleetPassphrase
-        : seed.fleetPassphrase),
+        : ''),
     e2eeLockedOnMobile: boot.lock,
     mobileNode,
     officeNode,
@@ -222,7 +228,17 @@ function applyIncomingEventToNode(
   const p = event.payload;
   const nowIso = new Date().toISOString();
 
-  if (event.actionType === 'SHIFT_ASSIGNED') {
+  if (event.actionType === 'DRIVER_ADDED') {
+    const drv = p.driver as Driver;
+    if (!next.drivers.some((d) => d.id === drv.id)) {
+      next = { ...next, drivers: [...next.drivers, drv] };
+    }
+  } else if (event.actionType === 'VEHICLE_ADDED') {
+    const veh = p.vehicle as CompanyVehicle;
+    if (!next.vehicles.some((v) => v.id === veh.id)) {
+      next = { ...next, vehicles: [...next.vehicles, veh] };
+    }
+  } else if (event.actionType === 'SHIFT_ASSIGNED') {
     const incomingShift = p.shift as Shift;
     const drv = next.drivers.find((d) => d.id === incomingShift.driverId);
     const exists = next.shifts.some((s) => s.id === incomingShift.id);
@@ -410,6 +426,14 @@ interface SystemContextValue {
   syncError: string | null;
   setActiveSegment: (seg: SegmentView) => void;
   switchTenant: (tenantId: string, pathwayToken: string) => void;
+  configureConnection: (input: {
+    tenantId: string;
+    pathwayToken: string;
+    fleetPassphrase?: string;
+  }) => void;
+  acceptDesktopStart: () => void;
+  acceptMobileStart: () => void;
+  reopenStartScreen: (target: 'desktop' | 'mobile') => void;
   unlockMobileE2ee: (passphrase: string) => void;
   setActiveMobileDriverId: (driverId: string) => void;
   toggleOfflineTunnelMode: () => void;
@@ -417,6 +441,20 @@ interface SystemContextValue {
   updateFleetPassphrase: (passphrase: string) => void;
   updateRollingWindowSize: (size: number) => void;
   triggerGatewaySync: () => Promise<void>;
+  addDriver: (input: {
+    name: string;
+    licenseCode: string;
+    homeStation: StationName;
+    phone: string;
+  }) => void;
+  addVehicle: (input: {
+    model: string;
+    plate: string;
+    currentStation: StationName;
+    mileageKm: number;
+    nextServiceKm: number;
+    fuelPercent: number;
+  }) => void;
   assignOrReassignShift: (input: CreateOrReassignShiftInput) => {
     ok: boolean;
     evaluation: RuleEvaluationResult;
@@ -443,7 +481,7 @@ interface SystemContextValue {
   acknowledgeMessage: (messageId: string, driverId: string) => void;
   updateRuleConfig: (config: RuleConfig) => void;
   setAiAuditReport: (report: AiAuditReport | null) => void;
-  resetDemoData: () => void;
+  purgeLocalData: () => void;
 }
 
 const SystemContext = createContext<SystemContextValue | null>(null);
@@ -466,6 +504,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
   // Dynamically bind PWA manifest link to the active tenant's server-packaged manifest
   useEffect(() => {
+    if (!state.activeTenantId) return;
     try {
       let link = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
       if (!link) {
@@ -473,7 +512,9 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         link.rel = 'manifest';
         document.head.appendChild(link);
       }
-      link.href = `/api/t/${encodeURIComponent(state.activeTenantId)}/mobile-manifest.webmanifest`;
+      link.href = apiUrl(
+        `/api/t/${encodeURIComponent(state.activeTenantId)}/mobile-manifest.webmanifest`
+      );
     } catch {
       // ignore DOM manifest errors
     }
@@ -481,8 +522,14 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     try {
-      localStorage.setItem(mobileStorageKey(state.activeTenantId), JSON.stringify(state.mobileNode));
-      localStorage.setItem(officeStorageKey(state.activeTenantId), JSON.stringify(state.officeNode));
+      localStorage.setItem(
+        mobileStorageKey(state.activeTenantId),
+        JSON.stringify(state.mobileNode)
+      );
+      localStorage.setItem(
+        officeStorageKey(state.activeTenantId),
+        JSON.stringify(state.officeNode)
+      );
       localStorage.setItem(
         META_STORAGE_KEY,
         JSON.stringify({
@@ -490,6 +537,8 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
           activeTenantId: state.activeTenantId,
           activePathwayToken: state.activePathwayToken,
           activeMobileDriverId: state.activeMobileDriverId,
+          desktopStartAccepted: state.desktopStartAccepted,
+          mobileStartAccepted: state.mobileStartAccepted,
           offlineTunnelMode: state.offlineTunnelMode,
           officeOfflineMode: state.officeOfflineMode,
           rollingWindowSize: state.rollingWindowSize,
@@ -523,8 +572,19 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
   const refreshGatewaySnapshot = useCallback(async () => {
     const cur = stateRef.current;
+    if (!cur.activeTenantId || !cur.activePathwayToken) {
+      setGatewaySnapshot({
+        tenantId: '',
+        envelopes: [],
+        queuedMobile: 0,
+        queuedOffice: 0,
+        ackedRollingCount: 0,
+        rollingWindowLimit: 20,
+      });
+      return;
+    }
     try {
-      const resp = await fetch(
+      const resp = await apiFetch(
         `/api/t/${encodeURIComponent(cur.activeTenantId)}/gateway/envelopes`,
         {
           headers: { 'X-Pathway-Token': cur.activePathwayToken },
@@ -534,7 +594,9 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         const data = (await resp.json()) as GatewayTelemetrySnapshot;
         setGatewaySnapshot(data);
         setSyncError((prev) =>
-          prev?.includes('Licenca') || prev?.includes('Pathway') ? null : prev
+          prev?.includes('Licenca') || prev?.includes('Pathway') || prev?.includes('Nepoznat')
+            ? null
+            : prev
         );
       } else {
         const errData = await resp.json().catch(() => ({}));
@@ -546,6 +608,14 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const triggerGatewaySync = useCallback(async () => {
+    const curSnapshot = stateRef.current;
+    if (
+      !curSnapshot.activeTenantId ||
+      !curSnapshot.activePathwayToken ||
+      !curSnapshot.fleetPassphrase
+    ) {
+      return;
+    }
     if (syncLockRef.current) return;
     syncLockRef.current = true;
 
@@ -568,7 +638,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
         for (const ev of pendingMobile) {
           const { iv, ciphertext } = await encryptEnvelopePayload(key, ev);
-          const resp = await fetch(`${tenantBase}/publish`, {
+          const resp = await apiFetch(`${tenantBase}/publish`, {
             method: 'POST',
             headers: gwHeaders,
             body: JSON.stringify({
@@ -618,7 +688,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
         for (const ev of pendingOffice) {
           const { iv, ciphertext } = await encryptEnvelopePayload(key, ev);
-          const resp = await fetch(`${tenantBase}/publish`, {
+          const resp = await apiFetch(`${tenantBase}/publish`, {
             method: 'POST',
             headers: gwHeaders,
             body: JSON.stringify({
@@ -656,7 +726,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
       // 3. Office Pull -> Decrypt -> Rule Engine -> ACK
       if (!cur.officeOfflineMode) {
-        const pullResp = await fetch(`${tenantBase}/pull?node=office`, {
+        const pullResp = await apiFetch(`${tenantBase}/pull?node=office`, {
           headers: { 'X-Pathway-Token': cur.activePathwayToken },
         });
         if (pullResp.ok) {
@@ -676,7 +746,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               ackIds.push(env.id);
             } catch {
               gatewayNotice =
-                'Neuspešna E2EE dekripcija na kancelarijskom čvoru — proverite ključ flote.';
+                'Neuspešna E2EE dekripcija na kancelarijskom čvoru — proverite lokalni ključ.';
             }
           }
 
@@ -705,7 +775,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               };
             });
 
-            await fetch(`${tenantBase}/ack`, {
+            await apiFetch(`${tenantBase}/ack`, {
               method: 'POST',
               headers: gwHeaders,
               body: JSON.stringify({ envelopeIds: ackIds, ackedBy: 'office' }),
@@ -719,7 +789,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
       // 4. Mobile Pull -> Decrypt -> Local Rule Engine -> Rolling Window -> ACK
       if (!cur.offlineTunnelMode && !cur.e2eeLockedOnMobile) {
-        const pullResp = await fetch(`${tenantBase}/pull?node=mobile`, {
+        const pullResp = await apiFetch(`${tenantBase}/pull?node=mobile`, {
           headers: { 'X-Pathway-Token': cur.activePathwayToken },
         });
         if (pullResp.ok) {
@@ -739,7 +809,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               ackIds.push(env.id);
             } catch {
               gatewayNotice =
-                'Neuspešna E2EE dekripcija na mobilnom uređaju — proverite ključ flote.';
+                'Neuspešna E2EE dekripcija na mobilnom uređaju — proverite lokalni ključ.';
             }
           }
 
@@ -758,14 +828,21 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               const nextOfficeOutbox = prev.officeNode.outbox.map((o) =>
                 ackSet.has(o.id) ? { ...o, deliveryState: 'acked' as const } : o
               );
+              const resolvedMobDriver =
+                prev.activeMobileDriverId &&
+                nextMobile.drivers.some((d) => d.id === prev.activeMobileDriverId)
+                  ? prev.activeMobileDriverId
+                  : nextMobile.drivers[0]?.id || '';
+
               return {
                 ...prev,
+                activeMobileDriverId: resolvedMobDriver,
                 mobileNode: nextMobile,
                 officeNode: { ...prev.officeNode, outbox: nextOfficeOutbox },
               };
             });
 
-            await fetch(`${tenantBase}/ack`, {
+            await apiFetch(`${tenantBase}/ack`, {
               method: 'POST',
               headers: gwHeaders,
               body: JSON.stringify({ envelopeIds: ackIds, ackedBy: 'mobile' }),
@@ -821,26 +898,47 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const switchTenant = (tenantId: string, pathwayToken: string) => {
-    const { mobileNode, officeNode } = loadTenantNodes(tenantId);
-    const defaultPass =
-      tenantId === 'TENANT-PRIV-B'
-        ? 'BALKAN-RAIL-B-KLJUC'
-        : tenantId === 'TENANT-SRB-A'
-        ? 'ZP-PRIVATNI-E2EE-KLJUC'
-        : `E2EE-${tenantId}`;
+  const configureConnection: SystemContextValue['configureConnection'] = ({
+    tenantId,
+    pathwayToken,
+    fleetPassphrase,
+  }) => {
+    const cleanTenant = tenantId.trim();
+    const cleanToken = pathwayToken.trim();
+    const { mobileNode, officeNode } = loadTenantNodes(cleanTenant);
 
     setState((prev) => ({
       ...prev,
-      activeTenantId: tenantId,
-      activePathwayToken: pathwayToken,
-      activeMobileDriverId: mobileNode.drivers[0]?.id || 'drv-1',
-      fleetPassphrase: defaultPass,
+      activeTenantId: cleanTenant,
+      activePathwayToken: cleanToken,
+      activeMobileDriverId: mobileNode.drivers[0]?.id || '',
+      fleetPassphrase:
+        fleetPassphrase !== undefined ? fleetPassphrase.trim() : prev.fleetPassphrase,
       e2eeLockedOnMobile: false,
       mobileNode,
       officeNode,
       aiAuditReport: null,
     }));
+  };
+
+  const switchTenant = (tenantId: string, pathwayToken: string) => {
+    configureConnection({ tenantId, pathwayToken });
+  };
+
+  const acceptDesktopStart = () => {
+    setState((prev) => ({ ...prev, desktopStartAccepted: true }));
+  };
+
+  const acceptMobileStart = () => {
+    setState((prev) => ({ ...prev, mobileStartAccepted: true }));
+  };
+
+  const reopenStartScreen = (target: 'desktop' | 'mobile') => {
+    setState((prev) =>
+      target === 'desktop'
+        ? { ...prev, desktopStartAccepted: false }
+        : { ...prev, mobileStartAccepted: false }
+    );
   };
 
   const unlockMobileE2ee = (passphrase: string) => {
@@ -874,6 +972,93 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
       rollingWindowSize: bounded,
       mobileNode: enforceRollingWindow(prev.mobileNode, bounded),
     }));
+  };
+
+  const addDriver: SystemContextValue['addDriver'] = (input) => {
+    setState((prev) => {
+      const office = prev.officeNode;
+      const nowIso = new Date().toISOString();
+      const newDriver: Driver = {
+        id: uid('drv'),
+        name: input.name.trim(),
+        licenseCode: input.licenseCode.trim(),
+        homeStation: input.homeStation,
+        currentStation: input.homeStation,
+        status: 'Dostupan',
+        lastShiftEndTime: new Date(Date.now() - 24 * 3600000).toISOString(),
+        lastShiftEndedAwayFromBase: false,
+        phone: input.phone.trim(),
+      };
+
+      const syncEvent: SyncEvent = {
+        id: uid('ev'),
+        seq: office.nextSeq,
+        originNode: 'office',
+        targetNode: 'mobile',
+        actionType: 'DRIVER_ADDED',
+        createdAt: nowIso,
+        payload: { driver: newDriver },
+        deliveryState: 'local_only',
+      };
+
+      return {
+        ...prev,
+        activeMobileDriverId: prev.activeMobileDriverId || newDriver.id,
+        officeNode: {
+          ...office,
+          drivers: [...office.drivers, newDriver],
+          outbox: [...office.outbox, syncEvent],
+          nextSeq: office.nextSeq + 1,
+        },
+      };
+    });
+  };
+
+  const addVehicle: SystemContextValue['addVehicle'] = (input) => {
+    setState((prev) => {
+      const office = prev.officeNode;
+      const nowIso = new Date().toISOString();
+      const newVehicle: CompanyVehicle = {
+        id: uid('veh'),
+        model: input.model.trim(),
+        plate: input.plate.trim().toUpperCase(),
+        currentStation: input.currentStation,
+        status: 'Parkirano',
+        assignedDriverId: null,
+        mileageKm: Number(input.mileageKm) || 0,
+        nextServiceKm: Number(input.nextServiceKm) || 15000,
+        fuelPercent: Math.max(0, Math.min(100, Number(input.fuelPercent) || 100)),
+        conditionNote: 'Novo dodato službeno vozilo.',
+        equipment: {
+          radioStanica: true,
+          ključevi: true,
+          prsluk: true,
+          dokumentacija: true,
+        },
+        lastHandoverAt: nowIso,
+      };
+
+      const syncEvent: SyncEvent = {
+        id: uid('ev'),
+        seq: office.nextSeq,
+        originNode: 'office',
+        targetNode: 'mobile',
+        actionType: 'VEHICLE_ADDED',
+        createdAt: nowIso,
+        payload: { vehicle: newVehicle },
+        deliveryState: 'local_only',
+      };
+
+      return {
+        ...prev,
+        officeNode: {
+          ...office,
+          vehicles: [...office.vehicles, newVehicle],
+          outbox: [...office.outbox, syncEvent],
+          nextSeq: office.nextSeq + 1,
+        },
+      };
+    });
   };
 
   const assignOrReassignShift = (input: CreateOrReassignShiftInput) => {
@@ -940,9 +1125,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         id: `${shiftId}-seg-4`,
         type: 'rasprema',
         label: 'Rasprema i predaja smene',
-        startTime: new Date(
-          startMs + (prepH + driveH + waitH) * 3600000
-        ).toISOString(),
+        startTime: new Date(startMs + (prepH + driveH + waitH) * 3600000).toISOString(),
         endTime: new Date(
           startMs + (prepH + driveH + waitH + raspremaH) * 3600000
         ).toISOString(),
@@ -998,7 +1181,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     const newShift: Shift = {
       id: shiftId,
       driverId: driver.id,
-      clientOperator: input.clientOperator,
+      clientOperator: input.clientOperator.trim(),
       routeFrom: input.routeFrom,
       routeTo: input.routeTo,
       trainNumber: input.trainNumber,
@@ -1014,7 +1197,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         : night
         ? 'Noćni rad'
         : 'Standardno',
-      vehicleKmUsed: 95,
+      vehicleKmUsed: 0,
       notes: input.notes,
     };
 
@@ -1321,40 +1504,34 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
       const nextStatus =
         nearService || lowFuel || missingEquip || hasDamage
-          ? ('Servisno upozorenje' as const)
+          ? 'Servisno upozorenje'
           : input.action === 'PREUZIMANJE'
-          ? ('U upotrebi' as const)
-          : ('Parkirano' as const);
+          ? 'U upotrebi'
+          : 'Parkirano';
 
-      const updatedVehicle = {
+      const updatedVehicle: CompanyVehicle = {
         ...vehicle,
         currentStation: input.station,
+        status: nextStatus,
+        assignedDriverId: input.action === 'PREUZIMANJE' ? input.driverId : null,
         mileageKm: input.mileageKm,
         fuelPercent: input.fuelPercent,
         conditionNote: input.conditionNote,
         equipment: input.equipment,
-        assignedDriverId: input.action === 'PREUZIMANJE' ? driver.id : null,
-        status: nextStatus,
         lastHandoverAt: nowIso,
       };
 
-      const type: TelemetryType =
-        input.action === 'PREUZIMANJE' ? 'PREUZIMANJE_VOZILA' : 'PREDAJA_VOZILA';
-
-      const telItem: TelemetryLog = {
+      const logItem: TelemetryLog = {
         id: uid('tel'),
         timestamp: nowIso,
-        driverId: driver.id,
-        type,
+        driverId: input.driverId,
+        type:
+          input.action === 'PREUZIMANJE' ? 'PREUZIMANJE_VOZILA' : 'PREDAJA_VOZILA',
         classification: 'Flota i oprema',
         station: input.station,
         description: `${
-          input.action === 'PREUZIMANJE' ? 'Preuzeo' : 'Predao'
-        } ${vehicle.model} (${vehicle.plate}) u stanici ${
-          input.station
-        }. Kilometraža: ${input.mileageKm.toLocaleString('sr-RS')} km, gorivo: ${
-          input.fuelPercent
-        }%. ${input.conditionNote}`,
+          input.action === 'PREUZIMANJE' ? 'Preuzeto' : 'Predato'
+        } vozilo ${vehicle.model} (${vehicle.plate}) u stanici ${input.station}. Kilometraža: ${input.mileageKm} km, gorivo: ${input.fuelPercent}%.`,
         pendingSync: true,
       };
 
@@ -1364,10 +1541,8 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         actor: driver.name,
         actionType: 'VOZILO_PRIMOPREDAJA',
         details: `${
-          input.action === 'PREUZIMANJE' ? 'Preuzeo' : 'Predao'
-        } ${vehicle.model} ${vehicle.plate} u stanici ${
-          input.station
-        } (${input.mileageKm.toLocaleString('sr-RS')} km, ${input.fuelPercent}% goriva).`,
+          input.action === 'PREUZIMANJE' ? 'Preuzimanje' : 'Predaja'
+        } vozila ${vehicle.plate} (${input.station}, ${input.mileageKm} km).`,
       };
 
       const syncEvent: SyncEvent = {
@@ -1379,7 +1554,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         createdAt: nowIso,
         payload: {
           vehicle: updatedVehicle,
-          telemetry: telItem,
+          telemetry: logItem,
           audit: auditItem,
         },
         deliveryState: 'local_only',
@@ -1389,9 +1564,9 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         {
           ...mob,
           vehicles: mob.vehicles.map((v) =>
-            v.id === vehicle.id ? updatedVehicle : v
+            v.id === input.vehicleId ? updatedVehicle : v
           ),
-          telemetryLogs: [telItem, ...mob.telemetryLogs],
+          telemetryLogs: [logItem, ...mob.telemetryLogs],
           auditLogs: [auditItem, ...mob.auditLogs],
           outbox: [...mob.outbox, syncEvent],
           nextSeq: mob.nextSeq + 1,
@@ -1403,11 +1578,16 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sendDispatchMessage: SystemContextValue['sendDispatchMessage'] = (input) => {
+  const sendDispatchMessage = (input: {
+    recipientDriverId: string;
+    title: string;
+    body: string;
+    priority: 'Hitno' | 'Obaveštenje';
+  }) => {
     setState((prev) => {
       const office = prev.officeNode;
       const nowIso = new Date().toISOString();
-      const msg: DispatchMessage = {
+      const newMsg: DispatchMessage = {
         id: uid('msg'),
         recipientDriverId: input.recipientDriverId,
         senderName: 'Dispečerski centar',
@@ -1425,7 +1605,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         targetNode: 'mobile',
         actionType: 'DISPATCH_MESSAGE',
         createdAt: nowIso,
-        payload: { message: msg },
+        payload: { message: newMsg },
         deliveryState: 'local_only',
       };
 
@@ -1433,7 +1613,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         ...prev,
         officeNode: {
           ...office,
-          messages: [msg, ...office.messages],
+          messages: [newMsg, ...office.messages],
           outbox: [...office.outbox, syncEvent],
           nextSeq: office.nextSeq + 1,
         },
@@ -1445,16 +1625,13 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => {
       const mob = prev.mobileNode;
       const nowIso = new Date().toISOString();
-      const driver = mob.drivers.find((d) => d.id === driverId);
-      const msg = mob.messages.find((m) => m.id === messageId);
-      if (!msg || msg.acknowledgedAtByDriver[driverId]) return prev;
-
+      const drv = mob.drivers.find((d) => d.id === driverId);
       const auditItem: AuditLogEntry = {
         id: uid('aud'),
         timestamp: nowIso,
-        actor: driver?.name ?? driverId,
+        actor: drv?.name || driverId,
         actionType: 'POTVRDA_PORUKE',
-        details: `Potvrdio prijem poruke (Read Receipt): "${msg.title}".`,
+        details: `Potvrđen prijem dispečerske poruke (${messageId}).`,
       };
 
       const syncEvent: SyncEvent = {
@@ -1517,7 +1694,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
             {
               id: uid('aud'),
               timestamp: nowIso,
-              actor: 'Administrator sistema',
+              actor: 'Dispečer / Lokalna uprava',
               actionType: 'IZMENA_PRAVILA',
               details: `Ažurirani pragovi: odmor baza ${config.minRestHomeHours}h, van baze ${config.minRestAwayHours}h, max vožnja ${config.maxDrivingHours}h, max smena ${config.maxTotalShiftHours}h.`,
             },
@@ -1534,16 +1711,28 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, aiAuditReport: report }));
   };
 
-  const resetDemoData = () => {
-    localStorage.removeItem(mobileStorageKey('TENANT-SRB-A'));
-    localStorage.removeItem(officeStorageKey('TENANT-SRB-A'));
-    localStorage.removeItem(mobileStorageKey('TENANT-PRIV-B'));
-    localStorage.removeItem(officeStorageKey('TENANT-PRIV-B'));
-    const fresh = createSeedState('TENANT-SRB-A', 'pw_srb_a_91k4x8m2');
-    setState((prev) => ({ ...fresh, activeSegment: prev.activeSegment }));
-    void fetch('/api/gateway/reset', { method: 'POST' }).then(() =>
-      refreshGatewaySnapshot()
-    );
+  const purgeLocalData = () => {
+    try {
+      for (let i = localStorage.length - 1; i >= 0; i--) {
+        const k = localStorage.key(i);
+        if (k && (k.startsWith('zp_') || k.startsWith('zp_live_'))) {
+          localStorage.removeItem(k);
+        }
+      }
+    } catch {
+      // ignore
+    }
+    const clean = createInitialSystemState('', '');
+    setState((prev) => ({ ...clean, activeSegment: prev.activeSegment }));
+    setSyncError(null);
+    setGatewaySnapshot({
+      tenantId: '',
+      envelopes: [],
+      queuedMobile: 0,
+      queuedOffice: 0,
+      ackedRollingCount: 0,
+      rollingWindowLimit: 20,
+    });
   };
 
   return (
@@ -1554,6 +1743,10 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         syncError,
         setActiveSegment,
         switchTenant,
+        configureConnection,
+        acceptDesktopStart,
+        acceptMobileStart,
+        reopenStartScreen,
         unlockMobileE2ee,
         setActiveMobileDriverId,
         toggleOfflineTunnelMode,
@@ -1561,6 +1754,8 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         updateFleetPassphrase,
         updateRollingWindowSize,
         triggerGatewaySync,
+        addDriver,
+        addVehicle,
         assignOrReassignShift,
         startShiftFromMobile,
         endShiftFromMobile,
@@ -1570,7 +1765,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         acknowledgeMessage,
         updateRuleConfig,
         setAiAuditReport,
-        resetDemoData,
+        purgeLocalData,
       }}
     >
       {children}

@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import {
   AlertOctagon,
   AlertTriangle,
+  BookOpen,
   CalendarPlus,
   Car,
   CheckCircle2,
@@ -17,11 +18,14 @@ import {
   ShieldAlert,
   Sliders,
   Sparkles,
+  UserPlus,
   Users,
   Wifi,
   WifiOff,
 } from 'lucide-react';
 import { ClientQrProvisioner } from '../../components/ClientQrProvisioner';
+import { StartScreen } from '../../components/StartScreen';
+import { apiFetch, apiUrl } from '../../core/apiClient';
 import {
   buildAnonymizedAuditPayload,
   runLocalDeterministicAudit,
@@ -41,7 +45,6 @@ import {
   TelemetryClassification,
 } from '../../core/types';
 import {
-  CLIENT_OPERATORS,
   formatDateTimeSr,
   formatHours,
   formatTimeSr,
@@ -61,9 +64,14 @@ export const DispatcherDesktopView: React.FC = () => {
   const {
     state,
     gatewaySnapshot,
+    configureConnection,
+    acceptDesktopStart,
+    reopenStartScreen,
     toggleOfficeOfflineMode,
     updateFleetPassphrase,
     updateRuleConfig,
+    addDriver,
+    addVehicle,
     assignOrReassignShift,
     sendDispatchMessage,
     setAiAuditReport,
@@ -87,14 +95,12 @@ export const DispatcherDesktopView: React.FC = () => {
 
   const [modalOpen, setModalOpen] = useState(false);
   const [editingShiftId, setEditingShiftId] = useState<string | undefined>(undefined);
-  const [formDriverId, setFormDriverId] = useState(
-    office.drivers[1]?.id || office.drivers[0].id
-  );
-  const [formOperator, setFormOperator] = useState<ClientOperator>(CLIENT_OPERATORS[0]);
+  const [formDriverId, setFormDriverId] = useState(office.drivers[0]?.id || '');
+  const [formOperator, setFormOperator] = useState<ClientOperator>('');
   const [formFrom, setFormFrom] = useState<StationName>('Beograd Centar');
   const [formTo, setFormTo] = useState<StationName>('Lapovo');
-  const [formTrain, setFormTrain] = useState('45302');
-  const [formLoco, setFormLoco] = useState('441-612');
+  const [formTrain, setFormTrain] = useState('');
+  const [formLoco, setFormLoco] = useState('');
   const [formStart, setFormStart] = useState(() =>
     toLocalInputValue(new Date(Date.now() + 30 * 60000).toISOString())
   );
@@ -106,6 +112,19 @@ export const DispatcherDesktopView: React.FC = () => {
   const [overrideReason, setOverrideReason] = useState('');
   const [formError, setFormError] = useState<string | null>(null);
 
+  // Add Driver form state
+  const [newDrvName, setNewDrvName] = useState('');
+  const [newDrvLicense, setNewDrvLicense] = useState('');
+  const [newDrvStation, setNewDrvStation] = useState<StationName>('Beograd Centar');
+  const [newDrvPhone, setNewDrvPhone] = useState('');
+
+  // Add Vehicle form state
+  const [newVehModel, setNewVehModel] = useState('');
+  const [newVehPlate, setNewVehPlate] = useState('');
+  const [newVehStation, setNewVehStation] = useState<StationName>('Beograd Centar');
+  const [newVehKm, setNewVehKm] = useState(0);
+  const [newVehFuel, setNewVehFuel] = useState(100);
+
   const [msgRecipient, setMsgRecipient] = useState<string>('ALL');
   const [msgPriority, setMsgPriority] = useState<'Hitno' | 'Obaveštenje'>('Hitno');
   const [msgTitle, setMsgTitle] = useState('');
@@ -114,6 +133,11 @@ export const DispatcherDesktopView: React.FC = () => {
 
   const [aiLoading, setAiLoading] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+
+  const knownOperators = useMemo(
+    () => Array.from(new Set(office.shifts.map((s) => s.clientOperator).filter(Boolean))),
+    [office.shifts]
+  );
 
   const selectedDriver = office.drivers.find((d) => d.id === formDriverId);
 
@@ -135,12 +159,12 @@ export const DispatcherDesktopView: React.FC = () => {
 
   const openNewShiftModal = (preselectedDriverId?: string) => {
     setEditingShiftId(undefined);
-    setFormDriverId(preselectedDriverId || office.drivers[1]?.id || office.drivers[0].id);
-    setFormOperator('Srbija Kargo Klijent A');
+    setFormDriverId(preselectedDriverId || office.drivers[0]?.id || '');
+    setFormOperator(knownOperators[0] || '');
     setFormFrom('Beograd Centar');
     setFormTo('Lapovo');
-    setFormTrain(`45${Math.floor(100 + Math.random() * 899)}`);
-    setFormLoco('441-710');
+    setFormTrain('');
+    setFormLoco('');
     setFormStart(toLocalInputValue(new Date(Date.now() + 30 * 60000).toISOString()));
     setFormEnd(toLocalInputValue(new Date(Date.now() + 9.5 * 3600000).toISOString()));
     setFormNotes('');
@@ -260,7 +284,10 @@ export const DispatcherDesktopView: React.FC = () => {
   }, [office.drivers, office.shifts]);
 
   const billingByClient = useMemo(() => {
-    return CLIENT_OPERATORS.map((client) => {
+    const operators = Array.from(
+      new Set(office.shifts.map((s) => s.clientOperator).filter(Boolean))
+    );
+    return operators.map((client) => {
       const cShifts = office.shifts.filter((s) => s.clientOperator === client);
       let regularH = 0;
       let nightH = 0;
@@ -336,7 +363,7 @@ export const DispatcherDesktopView: React.FC = () => {
     setAiError(null);
     try {
       const anonymizedPayload = buildAnonymizedAuditPayload(office);
-      const resp = await fetch('/api/ai-audit', {
+      const resp = await apiFetch('/api/ai-audit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ anonymizedPayload }),
@@ -365,7 +392,57 @@ export const DispatcherDesktopView: React.FC = () => {
     }
   };
 
+  const handleAddDriverSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newDrvName.trim() || !newDrvLicense.trim()) return;
+    addDriver({
+      name: newDrvName,
+      licenseCode: newDrvLicense,
+      homeStation: newDrvStation,
+      phone: newDrvPhone,
+    });
+    setNewDrvName('');
+    setNewDrvLicense('');
+    setNewDrvPhone('');
+  };
+
+  const handleAddVehicleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newVehModel.trim() || !newVehPlate.trim()) return;
+    addVehicle({
+      model: newVehModel,
+      plate: newVehPlate,
+      currentStation: newVehStation,
+      mileageKm: newVehKm,
+      nextServiceKm: newVehKm + 15000,
+      fuelPercent: newVehFuel,
+    });
+    setNewVehModel('');
+    setNewVehPlate('');
+    setNewVehKm(0);
+    setNewVehFuel(100);
+  };
+
   const driverMap = new Map(office.drivers.map((d) => [d.id, d]));
+
+  if (!state.desktopStartAccepted) {
+    return (
+      <StartScreen
+        mode="desktop"
+        tenantId={state.activeTenantId}
+        pathwayToken={state.activePathwayToken}
+        fleetPassphrase={state.fleetPassphrase}
+        onConfirmAndStart={(cfg) => {
+          if (cfg.tenantId && cfg.pathwayToken) {
+            configureConnection(cfg);
+          } else if (cfg.fleetPassphrase) {
+            updateFleetPassphrase(cfg.fleetPassphrase);
+          }
+          acceptDesktopStart();
+        }}
+      />
+    );
+  }
 
   return (
     <div className="max-w-[1380px] mx-auto px-4 sm:px-6 py-6 space-y-6">
@@ -373,7 +450,7 @@ export const DispatcherDesktopView: React.FC = () => {
       <div className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-3 text-slate-700">
           <span className="font-semibold text-slate-900">
-            Lokalni Desktop / Docker Trezor ({state.activeTenantId})
+            Lokalni Desktop / Docker Trezor ({state.activeTenantId || 'Lokalni rad'})
           </span>
           <span className="text-slate-400">·</span>
           <span className="font-mono">
@@ -385,26 +462,37 @@ export const DispatcherDesktopView: React.FC = () => {
           </span>
         </div>
 
-        <button
-          type="button"
-          onClick={toggleOfficeOfflineMode}
-          className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border cursor-pointer ${
-            state.officeOfflineMode
-              ? 'bg-red-50 text-red-800 border-red-300'
-              : 'bg-emerald-50 text-emerald-800 border-emerald-300'
-          }`}
-        >
-          {state.officeOfflineMode ? (
-            <WifiOff className="w-3.5 h-3.5" />
-          ) : (
-            <Wifi className="w-3.5 h-3.5" />
-          )}
-          <span>
-            {state.officeOfflineMode
-              ? 'Kancelarija Offline (lokalni rad)'
-              : 'Kancelarija Online (E2EE Gateway)'}
-          </span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => reopenStartScreen('desktop')}
+            className="px-3 py-1.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-semibold flex items-center gap-1.5 cursor-pointer"
+          >
+            <BookOpen className="w-3.5 h-3.5" />
+            <span>Privatnost i uputstvo</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={toggleOfficeOfflineMode}
+            className={`px-3 py-1.5 rounded-lg font-semibold flex items-center gap-1.5 border cursor-pointer ${
+              state.officeOfflineMode
+                ? 'bg-red-50 text-red-800 border-red-300'
+                : 'bg-emerald-50 text-emerald-800 border-emerald-300'
+            }`}
+          >
+            {state.officeOfflineMode ? (
+              <WifiOff className="w-3.5 h-3.5" />
+            ) : (
+              <Wifi className="w-3.5 h-3.5" />
+            )}
+            <span>
+              {state.officeOfflineMode
+                ? 'Kancelarija Offline (lokalni rad)'
+                : 'Kancelarija Online (E2EE Gateway)'}
+            </span>
+          </button>
+        </div>
       </div>
 
       {/* Sub-Navigation + Primary Action */}
@@ -437,8 +525,9 @@ export const DispatcherDesktopView: React.FC = () => {
 
         <button
           type="button"
+          disabled={office.drivers.length === 0}
           onClick={() => openNewShiftModal()}
-          className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer"
+          className="px-4 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 disabled:opacity-40 text-white text-xs font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer"
         >
           <CalendarPlus className="w-4 h-4" />
           <span>Dodeli novu smenu</span>
@@ -447,6 +536,59 @@ export const DispatcherDesktopView: React.FC = () => {
 
       {activeTab === 'schedule' && (
         <div className="space-y-6">
+          {/* Add Driver Live Form */}
+          <form
+            onSubmit={handleAddDriverSubmit}
+            className="p-5 rounded-xl bg-white border border-slate-200 space-y-3"
+          >
+            <h2 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+              <UserPlus className="w-4 h-4 text-slate-700" />
+              <span>Dodaj mašinovođu u lokalni trezor</span>
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 text-xs">
+              <input
+                type="text"
+                required
+                value={newDrvName}
+                onChange={(e) => setNewDrvName(e.target.value)}
+                placeholder="Ime i prezime"
+                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-900"
+              />
+              <input
+                type="text"
+                required
+                value={newDrvLicense}
+                onChange={(e) => setNewDrvLicense(e.target.value)}
+                placeholder="Broj dozvole (npr. LIC-101)"
+                className="px-3 py-2 rounded-lg border border-slate-300 font-mono text-slate-900"
+              />
+              <select
+                value={newDrvStation}
+                onChange={(e) => setNewDrvStation(e.target.value as StationName)}
+                className="px-3 py-2 rounded-lg border border-slate-300 text-slate-900"
+              >
+                {STATIONS.map((s) => (
+                  <option key={s} value={s}>
+                    Matična: {s}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={newDrvPhone}
+                onChange={(e) => setNewDrvPhone(e.target.value)}
+                placeholder="Telefon (opciono)"
+                className="px-3 py-2 rounded-lg border border-slate-300 font-mono text-slate-900"
+              />
+              <button
+                type="submit"
+                className="py-2 px-4 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold cursor-pointer"
+              >
+                + Dodaj mašinovođu
+              </button>
+            </div>
+          </form>
+
           <section className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
@@ -458,6 +600,11 @@ export const DispatcherDesktopView: React.FC = () => {
               </span>
             </div>
 
+            {office.drivers.length === 0 ? (
+              <div className="py-8 text-center text-xs text-slate-500">
+                Lokalni trezor je prazan. Dodajte prvog mašinovođu u formi iznad da biste planirali smene i sinhronizovali mobilnu kabinu.
+              </div>
+            ) : (
             <div className="divide-y divide-slate-200">
               {office.drivers.map((drv) => {
                 const rest = getDriverRemainingRestHours(drv, office.ruleConfig);
@@ -553,6 +700,7 @@ export const DispatcherDesktopView: React.FC = () => {
                 );
               })}
             </div>
+            )}
           </section>
         </div>
       )}
@@ -1037,10 +1185,69 @@ export const DispatcherDesktopView: React.FC = () => {
           </section>
 
           <section className="p-5 rounded-xl bg-white border border-slate-200 space-y-4">
-            <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Car className="w-4 h-4 text-slate-700" />
-              <span>Službena vozila i oprema ({state.activeTenantId})</span>
-            </h2>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Car className="w-4 h-4 text-slate-700" />
+                <span>Službena vozila i oprema ({state.activeTenantId || 'Lokalni trezor'})</span>
+              </h2>
+            </div>
+
+            <form
+              onSubmit={handleAddVehicleSubmit}
+              className="p-3.5 rounded-lg bg-slate-50 border border-slate-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-2.5 text-xs"
+            >
+              <input
+                type="text"
+                required
+                value={newVehModel}
+                onChange={(e) => setNewVehModel(e.target.value)}
+                placeholder="Model vozila"
+                className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              />
+              <input
+                type="text"
+                required
+                value={newVehPlate}
+                onChange={(e) => setNewVehPlate(e.target.value)}
+                placeholder="Registarska oznaka"
+                className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-mono text-slate-900"
+              />
+              <select
+                value={newVehStation}
+                onChange={(e) => setNewVehStation(e.target.value as StationName)}
+                className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
+              >
+                {STATIONS.map((s) => (
+                  <option key={s} value={s}>
+                    {s}
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                min={0}
+                value={newVehKm}
+                onChange={(e) => setNewVehKm(Number(e.target.value))}
+                placeholder="Kilometraža"
+                className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-mono text-slate-900"
+              />
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={newVehFuel}
+                onChange={(e) => setNewVehFuel(Number(e.target.value))}
+                placeholder="Gorivo %"
+                className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white font-mono text-slate-900"
+              />
+              <button
+                type="submit"
+                className="py-2 px-3 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold cursor-pointer"
+              >
+                + Dodaj vozilo
+              </button>
+            </form>
+
             <div className="overflow-x-auto">
               <table className="w-full text-left border-collapse text-sm">
                 <thead>
@@ -1055,28 +1262,36 @@ export const DispatcherDesktopView: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
-                  {office.vehicles.map((veh) => (
-                    <tr key={veh.id}>
-                      <td className="py-2.5 pr-4">
-                        <div className="font-semibold text-slate-900">{veh.model}</div>
-                        <div className="text-xs font-mono text-slate-500">{veh.plate}</div>
+                  {office.vehicles.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-6 text-center text-xs text-slate-500">
+                        Nema registrovanih službenih vozila. Dodajte vozilo u formi iznad.
                       </td>
-                      <td className="py-2.5 pr-4">{veh.currentStation}</td>
-                      <td className="py-2.5 pr-4 text-xs text-slate-700">
-                        {veh.assignedDriverId
-                          ? driverMap.get(veh.assignedDriverId)?.name || veh.assignedDriverId
-                          : 'Slobodno / Parkirano'}
-                      </td>
-                      <td className="py-2.5 pr-4 text-xs font-semibold">{veh.status}</td>
-                      <td className="py-2.5 pr-4 text-right font-mono tabular-nums">
-                        {veh.mileageKm.toLocaleString('sr-RS')} km
-                      </td>
-                      <td className="py-2.5 pr-4 text-right font-mono tabular-nums">
-                        {veh.fuelPercent}%
-                      </td>
-                      <td className="py-2.5 text-xs text-slate-600">{veh.conditionNote}</td>
                     </tr>
-                  ))}
+                  ) : (
+                    office.vehicles.map((veh) => (
+                      <tr key={veh.id}>
+                        <td className="py-2.5 pr-4">
+                          <div className="font-semibold text-slate-900">{veh.model}</div>
+                          <div className="text-xs font-mono text-slate-500">{veh.plate}</div>
+                        </td>
+                        <td className="py-2.5 pr-4">{veh.currentStation}</td>
+                        <td className="py-2.5 pr-4 text-xs text-slate-700">
+                          {veh.assignedDriverId
+                            ? driverMap.get(veh.assignedDriverId)?.name || veh.assignedDriverId
+                            : 'Slobodno / Parkirano'}
+                        </td>
+                        <td className="py-2.5 pr-4 text-xs font-semibold">{veh.status}</td>
+                        <td className="py-2.5 pr-4 text-right font-mono tabular-nums">
+                          {veh.mileageKm.toLocaleString('sr-RS')} km
+                        </td>
+                        <td className="py-2.5 pr-4 text-right font-mono tabular-nums">
+                          {veh.fuelPercent}%
+                        </td>
+                        <td className="py-2.5 text-xs text-slate-600">{veh.conditionNote}</td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1350,7 +1565,7 @@ export const DispatcherDesktopView: React.FC = () => {
               </button>
 
               <a
-                href="/api/download/desktop/docker"
+                href={apiUrl('/api/download/desktop/docker')}
                 download
                 className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5"
               >
@@ -1407,17 +1622,20 @@ export const DispatcherDesktopView: React.FC = () => {
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Klijent operater
                 </label>
-                <select
+                <input
+                  type="text"
+                  required
+                  list="client-operator-list"
                   value={formOperator}
-                  onChange={(e) => setFormOperator(e.target.value as ClientOperator)}
+                  onChange={(e) => setFormOperator(e.target.value)}
+                  placeholder="Naziv železničkog operatera"
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900"
-                >
-                  {CLIENT_OPERATORS.map((op) => (
-                    <option key={op} value={op}>
-                      {op}
-                    </option>
+                />
+                <datalist id="client-operator-list">
+                  {knownOperators.map((op) => (
+                    <option key={op} value={op} />
                   ))}
-                </select>
+                </datalist>
               </div>
 
               <div>

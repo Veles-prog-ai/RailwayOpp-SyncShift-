@@ -1,4 +1,4 @@
-import { ClientOperator, StationName } from './types';
+import { StationName } from './types';
 
 export const STATIONS: StationName[] = [
   'Beograd Centar',
@@ -6,11 +6,6 @@ export const STATIONS: StationName[] = [
   'Niš',
   'Dimitrovgrad',
   'Subotica',
-];
-
-export const CLIENT_OPERATORS: ClientOperator[] = [
-  'Srbija Kargo Klijent A',
-  'Privatni Operater B',
 ];
 
 export function formatTimeSr(iso: string): string {

@@ -11,6 +11,7 @@ import {
   Smartphone,
   Terminal,
 } from 'lucide-react';
+import { API_BASE_URL, apiUrl } from '../../core/apiClient';
 import { useSystem } from '../../core/store';
 
 interface DownloadPackageItem {
@@ -29,7 +30,7 @@ const DESKTOP_PACKAGES: DownloadPackageItem[] = [
     subtitle:
       'Samostalna dispečerska aplikacija sa lokalnim čuvanjem podataka i direktnom vezom ka serveru.',
     fileLabel: 'Preuzmi za Windows (.cmd)',
-    href: '/api/download/desktop/windows',
+    href: apiUrl('/api/download/desktop/windows'),
     icon: 'monitor',
   },
   {
@@ -38,7 +39,7 @@ const DESKTOP_PACKAGES: DownloadPackageItem[] = [
     subtitle:
       'Kontejnersko rešenje za stalni rad dispečerske kancelarije i privatnu bazu na serveru firme.',
     fileLabel: 'Preuzmi Docker Compose (.yml)',
-    href: '/api/download/desktop/docker',
+    href: apiUrl('/api/download/desktop/docker'),
     icon: 'docker',
   },
   {
@@ -47,7 +48,7 @@ const DESKTOP_PACKAGES: DownloadPackageItem[] = [
     subtitle:
       'Instalaciona skripta za Ubuntu, Debian i Fedora radne stanice sa sistemskom prečicom.',
     fileLabel: 'Preuzmi za Linux (.sh)',
-    href: '/api/download/desktop/linux',
+    href: apiUrl('/api/download/desktop/linux'),
     icon: 'terminal',
   },
   {
@@ -56,7 +57,7 @@ const DESKTOP_PACKAGES: DownloadPackageItem[] = [
     subtitle:
       'Direktni pokretač Upravnog desktopa za Apple radne stanice bez dodatnog podešavanja.',
     fileLabel: 'Preuzmi za macOS (.command)',
-    href: '/api/download/desktop/mac',
+    href: apiUrl('/api/download/desktop/mac'),
     icon: 'monitor',
   },
 ];
@@ -68,7 +69,8 @@ export const LandingServerView: React.FC = () => {
   const [lastDownloaded, setLastDownloaded] = useState<string | null>(null);
 
   const serverOrigin =
-    typeof window !== 'undefined' ? window.location.origin : 'https://server.local';
+    API_BASE_URL ||
+    (typeof window !== 'undefined' ? window.location.origin : 'https://server.local');
 
   const scrollToDownloads = () => {
     const el = document.getElementById('preuzimanje-desktop');
@@ -276,9 +278,11 @@ export const LandingServerView: React.FC = () => {
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 leading-relaxed">
                 Dispečer u svom lokalnom Desktop programu bira klijentski kanal (
-                <span className="font-mono">{state.activeTenantId}</span>) i konkretnog
-                mašinovođu, čime se aplikacija na telefonu automatski vezuje za pravi
-                profil i rutu.
+                <span className="font-mono">
+                  {state.activeTenantId || 'vaš izolovani Tenant ID'}
+                </span>
+                ) i konkretnog mašinovođu, čime se aplikacija na telefonu automatski
+                vezuje za pravi profil i rutu.
               </p>
             </div>
 
@@ -321,7 +325,7 @@ export const LandingServerView: React.FC = () => {
               Povezana celina iz 3 nezavisna segmenta
             </h2>
             <a
-              href="/landing"
+              href={apiUrl('/landing')}
               target="_blank"
               rel="noreferrer"
               className="text-xs font-semibold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1.5 underline underline-offset-4"
@@ -408,10 +412,10 @@ export const LandingServerView: React.FC = () => {
             </span>
           </div>
           <div className="flex items-center gap-4">
-            <a href="/landing" className="hover:text-slate-900 underline underline-offset-2">
+            <a href={apiUrl('/landing')} className="hover:text-slate-900 underline underline-offset-2">
               Serverski HTML (/landing)
             </a>
-            <a href="/api/health" className="hover:text-slate-900 underline underline-offset-2">
+            <a href={apiUrl('/api/health')} className="hover:text-slate-900 underline underline-offset-2">
               Provera servera
             </a>
           </div>

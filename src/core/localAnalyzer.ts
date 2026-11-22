@@ -87,11 +87,16 @@ export function runLocalDeterministicAudit(node: NodeLocalData): AiAuditReport {
     });
   }
 
-  const lapovoVeh = node.vehicles.find((v) => v.currentStation === 'Lapovo');
-  if (lapovoVeh && lapovoVeh.status === 'Servisno upozorenje') {
+  const serviceWarningVeh = node.vehicles.find((v) => v.status === 'Servisno upozorenje');
+  if (serviceWarningVeh) {
+    const spareVeh = node.vehicles.find(
+      (v) => v.id !== serviceWarningVeh.id && v.status === 'Parkirano'
+    );
     recommendations.push({
-      title: 'Preventivni servis u Lapovu',
-      action: `Zameniti ${lapovoVeh.model} (${lapovoVeh.plate}) vozilom Škoda Octavia BG-102-ŽS iz Beograda pre isteka 150.000 km i dopuniti dokumentaciju.`,
+      title: `Preventivni servis (${serviceWarningVeh.currentStation})`,
+      action: spareVeh
+        ? `Zameniti ${serviceWarningVeh.model} (${serviceWarningVeh.plate}) slobodnim vozilom ${spareVeh.model} (${spareVeh.plate}) iz stanice ${spareVeh.currentStation} i dopuniti opremu.`
+        : `Uputiti ${serviceWarningVeh.model} (${serviceWarningVeh.plate}) na redovan servis pre isteka ${serviceWarningVeh.nextServiceKm.toLocaleString('sr-RS')} km.`,
       estimatedBenefit: 'Sprečavanje neplaniranog ispada službenog vozila na koridoru.',
     });
   }

@@ -20,7 +20,7 @@ const SEGMENTS: Array<{ id: SegmentView; label: string }> = [
 ];
 
 function WorkspaceShell() {
-  const { state, setActiveSegment, resetDemoData } = useSystem();
+  const { state, setActiveSegment, purgeLocalData } = useSystem();
   const isCabDark = state.activeSegment === 'mobile';
 
   return (
@@ -76,7 +76,7 @@ function WorkspaceShell() {
         <div className="shrink-0">
           <button
             type="button"
-            onClick={resetDemoData}
+            onClick={purgeLocalData}
             className={`px-3 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
               isCabDark
                 ? 'bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700'
@@ -84,7 +84,7 @@ function WorkspaceShell() {
             }`}
           >
             <RotateCcw className="w-3.5 h-3.5" />
-            <span className="hidden md:inline">Resetuj demo podatke</span>
+            <span className="hidden md:inline">Očisti lokalno</span>
           </button>
         </div>
       </header>

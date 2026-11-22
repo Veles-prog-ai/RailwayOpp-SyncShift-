@@ -93,73 +93,14 @@ function signLicensePayload(
   return { signature, licenseKey };
 }
 
-function seedTenantsAndLicenses() {
+function clearServerState() {
   tenantBuffers.clear();
   tenantRegistry.clear();
   licenseRegistry.clear();
-
-  const initialTenants: Array<{
-    tenantId: string;
-    clientName: string;
-    pathwayToken: string;
-    plan: LicenseRecord['plan'];
-    maxDrivers: number;
-  }> = [
-    {
-      tenantId: 'TENANT-SRB-A',
-      clientName: 'Srbija Kargo Operater A',
-      pathwayToken: 'pw_srb_a_91k4x8m2',
-      plan: 'Flota Pro',
-      maxDrivers: 50,
-    },
-    {
-      tenantId: 'TENANT-PRIV-B',
-      clientName: 'Balkan Rail Logistika B',
-      pathwayToken: 'pw_priv_b_38m2q7v5',
-      plan: 'Standard',
-      maxDrivers: 15,
-    },
-  ];
-
-  const now = new Date();
-  const expires = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000).toISOString();
-
-  for (const item of initialTenants) {
-    tenantRegistry.set(item.tenantId, {
-      tenantId: item.tenantId,
-      clientName: item.clientName,
-      pathwayPrefix: `/api/t/${item.tenantId}/gateway`,
-      pathwayToken: item.pathwayToken,
-      status: 'active',
-      createdAt: now.toISOString(),
-      isolationMode: 'strict-pathway-token',
-    });
-    tenantBuffers.set(item.tenantId, []);
-
-    const { signature, licenseKey } = signLicensePayload(
-      item.tenantId,
-      item.plan,
-      item.maxDrivers,
-      expires
-    );
-    const licId = `LIC-${item.tenantId}`;
-    licenseRegistry.set(licId, {
-      licenseId: licId,
-      tenantId: item.tenantId,
-      clientName: item.clientName,
-      plan: item.plan,
-      maxDrivers: item.maxDrivers,
-      modules: ['Mobilna kabina', 'Deterministički motor', 'E2EE Gateway', 'AI Kontrola'],
-      issuedAt: now.toISOString(),
-      expiresAt: expires,
-      status: 'active',
-      signature,
-      licenseKey,
-    });
-  }
+  apiLogs.length = 0;
 }
 
-seedTenantsAndLicenses();
+clearServerState();
 
 function getTenantBuffer(tenantId: string): GatewayEnvelope[] {
   let buf = tenantBuffers.get(tenantId);
@@ -212,6 +153,18 @@ function recordApiLog(entry: Omit<ApiLogEntry, 'id' | 'timestamp'>) {
 async function startServer() {
   const app = express();
   app.use(express.json({ limit: '512kb' }));
+
+  const allowedOrigin = process.env.ALLOWED_ORIGIN || '*';
+  app.use('/api', (req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Pathway-Token');
+    if (req.method === 'OPTIONS') {
+      res.status(204).end();
+      return;
+    }
+    next();
+  });
 
   // Lightweight API request telemetry middleware (records /api/* calls only)
   app.use('/api', (req, res, next) => {
@@ -683,8 +636,12 @@ async function startServer() {
   });
 
   app.post('/api/gateway/reset', (_req, res) => {
-    seedTenantsAndLicenses();
-    apiLogs.length = 0;
+    clearServerState();
+    res.json({ ok: true });
+  });
+
+  app.post('/api/admin/purge', (_req, res) => {
+    clearServerState();
     res.json({ ok: true });
   });
 
@@ -1006,28 +963,42 @@ async function startServer() {
   });
 
   const httpServer = http.createServer(app);
+  const serveFrontend = process.env.SERVE_FRONTEND !== 'false';
 
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: {
-        middlewareMode: true,
-        allowedHosts: true,
-        ws: { server: httpServer },
-        hmr: process.env.DISABLE_HMR === 'true' ? false : true,
-      },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  if (serveFrontend) {
+    if (process.env.NODE_ENV !== 'production') {
+      const vite = await createViteServer({
+        server: {
+          middlewareMode: true,
+          allowedHosts: true,
+          ws: { server: httpServer },
+          hmr: process.env.DISABLE_HMR === 'true' ? false : true,
+        },
+        appType: 'spa',
+      });
+      app.use(vite.middlewares);
+    } else {
+      const distDir = path.resolve(__dirname, 'dist');
+      app.use(express.static(distDir));
+      app.get('*', (_req, res) => {
+        res.sendFile(path.join(distDir, 'index.html'));
+      });
+    }
   } else {
-    const distDir = path.resolve(__dirname, 'dist');
-    app.use(express.static(distDir));
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(distDir, 'index.html'));
+    app.get('/', (_req, res) => {
+      res.json({
+        service: 'zeleznicki-pogon-backend',
+        mode: 'backend-only',
+        health: '/api/health',
+        landing: '/landing',
+      });
     });
   }
 
   httpServer.listen(PORT, '0.0.0.0', () => {
-    console.log(`Multi-Tenant E2EE Gateway pokrenut na http://0.0.0.0:${PORT}`);
+    console.log(
+      `Multi-Tenant E2EE Gateway pokrenut na http://0.0.0.0:${PORT} (serveFrontend=${serveFrontend})`
+    );
   });
 }
 

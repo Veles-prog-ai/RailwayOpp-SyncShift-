@@ -10,7 +10,9 @@ import {
   Server,
   ShieldCheck,
   Terminal,
+  Trash2,
 } from 'lucide-react';
+import { apiFetch, apiUrl } from '../../core/apiClient';
 import { useSystem } from '../../core/store';
 import {
   LicenseInfo,
@@ -60,14 +62,20 @@ export const ServerAdminView: React.FC = () => {
   const fetchAdminData = useCallback(async () => {
     try {
       const [tResp, lResp, logResp, dResp] = await Promise.all([
-        fetch('/api/admin/tenants'),
-        fetch('/api/admin/licenses'),
-        fetch(`/api/admin/api-logs?tenantId=${encodeURIComponent(apiTenantFilter)}`),
-        fetch('/api/admin/diagnostics'),
+        apiFetch('/api/admin/tenants'),
+        apiFetch('/api/admin/licenses'),
+        apiFetch(`/api/admin/api-logs?tenantId=${encodeURIComponent(apiTenantFilter)}`),
+        apiFetch('/api/admin/diagnostics'),
       ]);
       if (tResp.ok) {
         const d = await tResp.json();
-        setTenants(d.tenants || []);
+        const nextTenants: TenantInfo[] = d.tenants || [];
+        setTenants(nextTenants);
+        setLicTenantId((prev) =>
+          prev && nextTenants.some((t) => t.tenantId === prev)
+            ? prev
+            : nextTenants[0]?.tenantId || ''
+        );
       }
       if (lResp.ok) {
         const d = await lResp.json();
@@ -96,7 +104,7 @@ export const ServerAdminView: React.FC = () => {
   const handleCreateTenant = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newClientName.trim()) return;
-    const resp = await fetch('/api/admin/tenants', {
+    const resp = await apiFetch('/api/admin/tenants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientName: newClientName.trim() }),
@@ -112,7 +120,7 @@ export const ServerAdminView: React.FC = () => {
   };
 
   const handleRotateToken = async (tenantId: string) => {
-    const resp = await fetch(
+    const resp = await apiFetch(
       `/api/admin/tenants/${encodeURIComponent(tenantId)}/rotate-token`,
       {
         method: 'POST',
@@ -129,7 +137,8 @@ export const ServerAdminView: React.FC = () => {
 
   const handleGenerateLicense = async (e: React.FormEvent) => {
     e.preventDefault();
-    const resp = await fetch('/api/admin/licenses/generate', {
+    if (!licTenantId) return;
+    const resp = await apiFetch('/api/admin/licenses/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -150,7 +159,7 @@ export const ServerAdminView: React.FC = () => {
   };
 
   const handleToggleLicense = async (licenseId: string) => {
-    await fetch(`/api/admin/licenses/${encodeURIComponent(licenseId)}/toggle-status`, {
+    await apiFetch(`/api/admin/licenses/${encodeURIComponent(licenseId)}/toggle-status`, {
       method: 'POST',
     });
     await fetchAdminData();
@@ -159,7 +168,7 @@ export const ServerAdminView: React.FC = () => {
 
   const handleVerifyLicense = async (e: React.FormEvent) => {
     e.preventDefault();
-    const resp = await fetch('/api/admin/licenses/verify', {
+    const resp = await apiFetch('/api/admin/licenses/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ licenseKey: verifyKeyInput }),
@@ -171,10 +180,19 @@ export const ServerAdminView: React.FC = () => {
   };
 
   const handleRunSelfTest = async () => {
-    const resp = await fetch('/api/admin/diagnostics/self-test', { method: 'POST' });
+    const resp = await apiFetch('/api/admin/diagnostics/self-test', { method: 'POST' });
     if (resp.ok) {
       const data = await resp.json();
       setSelfTestResults(data.results || []);
+      await fetchAdminData();
+    }
+  };
+
+  const handlePurgeServer = async () => {
+    const resp = await apiFetch('/api/admin/purge', { method: 'POST' });
+    if (resp.ok) {
+      setSelfTestResults([]);
+      setVerifyResult(null);
       await fetchAdminData();
     }
   };
@@ -208,7 +226,7 @@ export const ServerAdminView: React.FC = () => {
             className="px-3 py-1.5 rounded-lg border border-slate-300 bg-slate-50 text-xs font-semibold text-slate-900"
           >
             {tenants.length === 0 ? (
-              <option value={state.activeTenantId}>{state.activeTenantId}</option>
+              <option value="">Nema registrovanih klijenata</option>
             ) : (
               tenants.map((t) => (
                 <option key={t.tenantId} value={t.tenantId}>
@@ -225,6 +243,15 @@ export const ServerAdminView: React.FC = () => {
           >
             <RefreshCw className="w-3.5 h-3.5" />
             <span>Osveži</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handlePurgeServer()}
+            className="px-3 py-1.5 rounded-lg border border-red-300 hover:bg-red-50 text-xs font-semibold text-red-700 flex items-center gap-1.5 cursor-pointer"
+          >
+            <Trash2 className="w-3.5 h-3.5" />
+            <span>Isprazni server</span>
           </button>
         </div>
       </div>
@@ -283,7 +310,14 @@ export const ServerAdminView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {tenants.map((t) => {
+                    {tenants.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-6 text-center text-slate-500">
+                          Server je čist — nema registrovanih klijenata. Dodajte prvog klijenta u formi desno za početak live testiranja.
+                        </td>
+                      </tr>
+                    ) : (
+                      tenants.map((t) => {
                       const isCurrent = t.tenantId === state.activeTenantId;
                       return (
                         <tr
@@ -340,7 +374,8 @@ export const ServerAdminView: React.FC = () => {
                           </td>
                         </tr>
                       );
-                    })}
+                    })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -418,7 +453,7 @@ export const ServerAdminView: React.FC = () => {
                   Otvori Desktop klijenta
                 </a>
                 <a
-                  href="/landing"
+                  href={apiUrl('/landing')}
                   target="_blank"
                   rel="noreferrer"
                   className="px-3.5 py-2 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-800 font-semibold whitespace-nowrap"
@@ -566,7 +601,14 @@ export const ServerAdminView: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {licenses.map((lic) => (
+                    {licenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={5} className="py-5 text-center text-slate-500">
+                          Nema izdatih licenci. Kreirajte klijenta i generišite HMAC licencu.
+                        </td>
+                      </tr>
+                    ) : (
+                      licenses.map((lic) => (
                       <tr key={lic.licenseId}>
                         <td className="py-2.5 pr-3 font-mono font-semibold text-slate-900">
                           {lic.licenseKey}
@@ -607,7 +649,8 @@ export const ServerAdminView: React.FC = () => {
                           </button>
                         </td>
                       </tr>
-                    ))}
+                    ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -623,7 +666,7 @@ export const ServerAdminView: React.FC = () => {
             <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
               <div>
                 <h2 className="text-base font-bold text-slate-900">
-                  E2EE Gateway Bafer ({state.activeTenantId})
+                  E2EE Gateway Bafer ({state.activeTenantId || 'Nije izabran kanal'})
                 </h2>
                 <p className="text-xs text-slate-600">
                   Server vidi isključivo nečitljive AES-256-GCM koverte i metapodatke

@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
+  BookOpen,
   CalendarClock,
   Car,
   CheckCircle2,
@@ -16,6 +17,7 @@ import {
   WifiOff,
 } from 'lucide-react';
 import { PWAInstallButton } from '../../components/PWAInstallButton';
+import { StartScreen } from '../../components/StartScreen';
 import {
   evaluateShiftAssignment,
   getDriverRemainingRestHours,
@@ -30,6 +32,9 @@ export const DriverMobileView: React.FC = () => {
   const {
     state,
     syncError,
+    configureConnection,
+    acceptMobileStart,
+    reopenStartScreen,
     unlockMobileE2ee,
     setActiveMobileDriverId,
     toggleOfflineTunnelMode,
@@ -53,12 +58,14 @@ export const DriverMobileView: React.FC = () => {
   const driver =
     mob.drivers.find((d) => d.id === state.activeMobileDriverId) || mob.drivers[0];
 
-  const driverShifts = mob.shifts.filter((s) => s.driverId === driver.id);
+  const driverShifts = driver ? mob.shifts.filter((s) => s.driverId === driver.id) : [];
   const activeShift = driverShifts.find((s) => s.status === 'U toku');
   const nextShift = driverShifts.find((s) => s.status === 'Planirana');
   const focusShift = activeShift || nextShift;
 
-  const restInfo = getDriverRemainingRestHours(driver, mob.ruleConfig, nowTick);
+  const restInfo = driver
+    ? getDriverRemainingRestHours(driver, mob.ruleConfig, nowTick)
+    : { elapsed: 0, required: mob.ruleConfig.minRestHomeHours, remaining: 0 };
 
   const localPendingCount = mob.outbox.filter(
     (e) => e.deliveryState === 'local_only'
@@ -67,27 +74,29 @@ export const DriverMobileView: React.FC = () => {
     (e) => e.deliveryState === 'gateway_queued'
   ).length;
 
-  const [logStation, setLogStation] = useState<StationName>(driver.currentStation);
-  const [logRoute, setLogRoute] = useState(
-    focusShift ? `${focusShift.routeFrom} – ${focusShift.routeTo}` : 'Beograd Centar – Lapovo'
+  const [logStation, setLogStation] = useState<StationName>(
+    driver?.currentStation || 'Beograd Centar'
   );
-  const [logTrain, setLogTrain] = useState(focusShift?.trainNumber || '45210');
+  const [logRoute, setLogRoute] = useState(
+    focusShift ? `${focusShift.routeFrom} – ${focusShift.routeTo}` : ''
+  );
+  const [logTrain, setLogTrain] = useState(focusShift?.trainNumber || '');
   const [delayMinutes, setDelayMinutes] = useState<number>(20);
   const [logNote, setLogNote] = useState('');
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
 
   const [selectedVehicleId, setSelectedVehicleId] = useState(
-    mob.vehicles.find((v) => v.assignedDriverId === driver.id)?.id ||
+    (driver && mob.vehicles.find((v) => v.assignedDriverId === driver.id)?.id) ||
       mob.vehicles[0]?.id ||
       ''
   );
   const selectedVehicle = mob.vehicles.find((v) => v.id === selectedVehicleId);
   const [handoverAction, setHandoverAction] = useState<'PREUZIMANJE' | 'PREDAJA'>('PREDAJA');
   const [handoverStation, setHandoverStation] = useState<StationName>(
-    selectedVehicle?.currentStation || driver.currentStation
+    selectedVehicle?.currentStation || driver?.currentStation || 'Beograd Centar'
   );
-  const [mileageKm, setMileageKm] = useState<number>(selectedVehicle?.mileageKm || 118420);
-  const [fuelPercent, setFuelPercent] = useState<number>(selectedVehicle?.fuelPercent || 70);
+  const [mileageKm, setMileageKm] = useState<number>(selectedVehicle?.mileageKm || 0);
+  const [fuelPercent, setFuelPercent] = useState<number>(selectedVehicle?.fuelPercent || 100);
   const [conditionNote, setConditionNote] = useState('Bez novih oštećenja, redovno stanje.');
   const [equipment, setEquipment] = useState<VehicleEquipment>(
     selectedVehicle?.equipment || {
@@ -99,29 +108,39 @@ export const DriverMobileView: React.FC = () => {
   );
 
   useEffect(() => {
-    if (selectedVehicle) {
+    if (selectedVehicle && driver) {
       setHandoverStation(selectedVehicle.currentStation);
       setMileageKm(selectedVehicle.mileageKm);
       setFuelPercent(selectedVehicle.fuelPercent);
       setEquipment(selectedVehicle.equipment);
       setHandoverAction(selectedVehicle.assignedDriverId === driver.id ? 'PREDAJA' : 'PREUZIMANJE');
     }
-  }, [selectedVehicleId, driver.id]);
+  }, [selectedVehicleId, driver?.id, selectedVehicle]);
 
   useEffect(() => {
-    setLogStation(driver.currentStation);
+    if (!selectedVehicleId && mob.vehicles[0]?.id) {
+      setSelectedVehicleId(mob.vehicles[0].id);
+    }
+  }, [mob.vehicles, selectedVehicleId]);
+
+  useEffect(() => {
+    if (driver) {
+      setLogStation(driver.currentStation);
+    }
     if (focusShift) {
       setLogRoute(`${focusShift.routeFrom} – ${focusShift.routeTo}`);
       setLogTrain(focusShift.trainNumber);
     }
-  }, [driver.id, focusShift?.id]);
+  }, [driver?.id, focusShift?.id]);
 
-  const driverMessages = mob.messages.filter(
-    (m) => m.recipientDriverId === 'ALL' || m.recipientDriverId === driver.id
-  );
-  const unreadCount = driverMessages.filter(
-    (m) => !m.acknowledgedAtByDriver[driver.id]
-  ).length;
+  const driverMessages = driver
+    ? mob.messages.filter(
+        (m) => m.recipientDriverId === 'ALL' || m.recipientDriverId === driver.id
+      )
+    : [];
+  const unreadCount = driver
+    ? driverMessages.filter((m) => !m.acknowledgedAtByDriver[driver.id]).length
+    : 0;
 
   const showToast = (msg: string) => {
     setFeedbackMsg(msg);
@@ -129,6 +148,7 @@ export const DriverMobileView: React.FC = () => {
   };
 
   const handleQuickLog = (type: TelemetryType, defaultDesc: string, delay?: number) => {
+    if (!driver) return;
     logFieldTelemetry({
       driverId: driver.id,
       shiftId: focusShift?.id,
@@ -149,7 +169,7 @@ export const DriverMobileView: React.FC = () => {
 
   const handleHandoverSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedVehicle) return;
+    if (!selectedVehicle || !driver) return;
     submitVehicleHandover({
       vehicleId: selectedVehicle.id,
       driverId: driver.id,
@@ -167,155 +187,208 @@ export const DriverMobileView: React.FC = () => {
     );
   };
 
-  const recentDriverLogs = mob.telemetryLogs
-    .filter((t) => t.driverId === driver.id)
-    .slice(0, 5);
+  const recentDriverLogs = driver
+    ? mob.telemetryLogs.filter((t) => t.driverId === driver.id).slice(0, 5)
+    : [];
 
-  const localRulePreview = focusShift
-    ? evaluateShiftAssignment({
-        driver,
-        candidateShift: focusShift,
-        existingShifts: mob.shifts,
-        config: mob.ruleConfig,
-      })
-    : null;
+  const localRulePreview =
+    focusShift && driver
+      ? evaluateShiftAssignment({
+          driver,
+          candidateShift: focusShift,
+          existingShifts: mob.shifts,
+          config: mob.ruleConfig,
+        })
+      : null;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-slate-950/95 py-0 sm:py-6 px-0 sm:px-4 flex justify-center items-start">
       <div className="w-full sm:w-[390px] min-h-[calc(100vh-64px)] sm:min-h-[780px] sm:max-h-[840px] bg-slate-950 text-slate-100 sm:rounded-[32px] sm:border sm:border-slate-800 sm:shadow-2xl flex flex-col overflow-hidden relative">
-        <header className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
-          <div className="flex items-center justify-between gap-2">
-            <div className="min-w-0 flex-1">
-              <label htmlFor="cab-driver-select" className="sr-only">
-                Aktivni mašinovođa
-              </label>
-              <select
-                id="cab-driver-select"
-                value={driver.id}
-                onChange={(e) => setActiveMobileDriverId(e.target.value)}
-                className="w-full bg-slate-800 text-slate-100 text-sm font-semibold rounded-lg px-2.5 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
-              >
-                {mob.drivers.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name} ({d.currentStation})
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="button"
-              onClick={toggleOfflineTunnelMode}
-              className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
-                state.offlineTunnelMode
-                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
-                  : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
-              }`}
-              title="Simulacija gubitka signala u tunelu"
-            >
-              {state.offlineTunnelMode ? (
-                <>
-                  <WifiOff className="w-4 h-4" />
-                  <span>Tunel (Offline)</span>
-                </>
-              ) : (
-                <>
-                  <Wifi className="w-4 h-4" />
-                  <span>Online</span>
-                </>
-              )}
-            </button>
-          </div>
-
-          {/* Client Pathway + Store-and-Forward + Rolling Window */}
-          <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
-            <span className="flex items-center gap-1 text-emerald-400 font-mono truncate max-w-[140px]">
-              <Lock className="w-3 h-3 shrink-0" />
-              <span className="truncate">{state.activeTenantId}</span>
-            </span>
-            <span className="font-mono">
-              Prozor: {mob.telemetryLogs.length}/{state.rollingWindowSize}
-            </span>
-            <span
-              className={`font-mono font-semibold ${
-                localPendingCount > 0 || waitingAckCount > 0
-                  ? 'text-amber-300'
-                  : 'text-slate-400'
-              }`}
-            >
-              {localPendingCount > 0
-                ? `Lokalno: ${localPendingCount}`
-                : waitingAckCount > 0
-                ? `Čeka ACK: ${waitingAckCount}`
-                : 'ACK OK'}
-            </span>
-          </div>
-        </header>
-
-        {/* Confidential E2EE Lock Screen if launched from strict QR without key */}
-        {state.e2eeLockedOnMobile ? (
-          <main className="flex-1 p-5 flex flex-col justify-center space-y-4">
-            <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
-              <div className="flex items-center gap-2 text-amber-400 text-sm font-bold">
-                <KeyRound className="w-5 h-5" />
-                <span>Poverljiva aktivacija klijenta ({state.activeTenantId})</span>
-              </div>
-              <p className="text-xs text-slate-300 leading-relaxed">
-                Ova instalacija koristi izolovanu putanju i ne sadrži ključ u QR kodu.
-                Unesite interni E2EE ključ vaše kompanije za lokalno šifrovanje i
-                sinhronizaciju sa dispečerskim centrom.
-              </p>
-              <input
-                type="password"
-                value={e2eeInput}
-                onChange={(e) => setE2eeInput(e.target.value)}
-                placeholder="Unesite E2EE ključ kompanije..."
-                className="w-full min-h-[44px] bg-slate-950 border border-slate-700 rounded-xl px-3 text-sm font-mono text-slate-100"
-              />
-              <button
-                type="button"
-                onClick={() => {
-                  if (e2eeInput.trim()) unlockMobileE2ee(e2eeInput);
-                }}
-                className="w-full min-h-[48px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
-              >
-                Otključaj lokalni trezor
-              </button>
-            </div>
-          </main>
+        {!state.mobileStartAccepted ? (
+          <StartScreen
+            mode="mobile"
+            tenantId={state.activeTenantId}
+            pathwayToken={state.activePathwayToken}
+            fleetPassphrase={state.fleetPassphrase}
+            onConfirmAndStart={(cfg) => {
+              if (cfg.tenantId && cfg.pathwayToken) {
+                configureConnection(cfg);
+              } else if (cfg.fleetPassphrase) {
+                unlockMobileE2ee(cfg.fleetPassphrase);
+              }
+              acceptMobileStart();
+            }}
+          />
         ) : (
-          <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
-            {/* Specialized PWA Install Prompt (hides automatically in standalone mode) */}
-            <PWAInstallButton tenantName={state.activeTenantId} />
+          <>
+            <header className="px-4 py-2.5 bg-slate-900 border-b border-slate-800 shrink-0">
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0 flex-1">
+                  <label htmlFor="cab-driver-select" className="sr-only">
+                    Aktivni mašinovođa
+                  </label>
+                  <select
+                    id="cab-driver-select"
+                    value={driver?.id || ''}
+                    disabled={mob.drivers.length === 0}
+                    onChange={(e) => setActiveMobileDriverId(e.target.value)}
+                    className="w-full bg-slate-800 text-slate-100 text-sm font-semibold rounded-lg px-2.5 py-2 border border-slate-700 focus:outline-none focus:ring-2 focus:ring-amber-500"
+                  >
+                    {mob.drivers.length === 0 ? (
+                      <option value="">Čeka se profil mašinovođe</option>
+                    ) : (
+                      mob.drivers.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name} ({d.currentStation})
+                        </option>
+                      ))
+                    )}
+                  </select>
+                </div>
 
-            {syncError && (
-              <div className="p-3 rounded-xl bg-red-950/70 border border-red-700 text-xs text-red-200 flex items-start gap-2">
-                <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
-                <span>{syncError}</span>
+                <button
+                  type="button"
+                  onClick={() => reopenStartScreen('mobile')}
+                  title="Politika privatnosti i uputstvo"
+                  className="min-h-[40px] px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 flex items-center justify-center shrink-0 cursor-pointer"
+                >
+                  <BookOpen className="w-4 h-4" />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={toggleOfflineTunnelMode}
+                  className={`min-h-[40px] px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-colors cursor-pointer ${
+                    state.offlineTunnelMode
+                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50'
+                      : 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/40'
+                  }`}
+                  title="Simulacija gubitka signala u tunelu"
+                >
+                  {state.offlineTunnelMode ? (
+                    <>
+                      <WifiOff className="w-4 h-4" />
+                      <span>Tunel (Offline)</span>
+                    </>
+                  ) : (
+                    <>
+                      <Wifi className="w-4 h-4" />
+                      <span>Online</span>
+                    </>
+                  )}
+                </button>
               </div>
-            )}
 
-            {feedbackMsg && (
-              <div
-                role="status"
-                className="px-3 py-2.5 rounded-xl bg-emerald-900/60 border border-emerald-600/60 text-emerald-100 text-xs font-medium flex items-center gap-2"
-              >
-                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
-                <span>{feedbackMsg}</span>
+              {/* Client Pathway + Store-and-Forward + Rolling Window */}
+              <div className="mt-2 px-2.5 py-1.5 rounded-lg bg-slate-950 border border-slate-800 flex items-center justify-between text-[11px] text-slate-300">
+                <span className="flex items-center gap-1 text-emerald-400 font-mono truncate max-w-[140px]">
+                  <Lock className="w-3 h-3 shrink-0" />
+                  <span className="truncate">{state.activeTenantId || 'Nije povezan'}</span>
+                </span>
+                <span className="font-mono">
+                  Prozor: {mob.telemetryLogs.length}/{state.rollingWindowSize}
+                </span>
+                <span
+                  className={`font-mono font-semibold ${
+                    localPendingCount > 0 || waitingAckCount > 0
+                      ? 'text-amber-300'
+                      : 'text-slate-400'
+                  }`}
+                >
+                  {localPendingCount > 0
+                    ? `Lokalno: ${localPendingCount}`
+                    : waitingAckCount > 0
+                    ? `Čeka ACK: ${waitingAckCount}`
+                    : 'ACK OK'}
+                </span>
               </div>
-            )}
+            </header>
 
-            {tab === 'shifts' && (
-              <div className="space-y-4">
-                <section className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
-                  <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                    <span>Obavezni dnevni odmor (lokalni motor)</span>
-                    <span className="font-mono">
-                      {driver.lastShiftEndedAwayFromBase
-                        ? `Van baze (min ${mob.ruleConfig.minRestAwayHours}h)`
-                        : `Baza (min ${mob.ruleConfig.minRestHomeHours}h)`}
-                    </span>
+            {/* Confidential E2EE Lock Screen if launched from strict QR without key */}
+            {state.e2eeLockedOnMobile ? (
+              <main className="flex-1 p-5 flex flex-col justify-center space-y-4">
+                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-3">
+                  <div className="flex items-center gap-2 text-amber-400 text-sm font-bold">
+                    <KeyRound className="w-5 h-5" />
+                    <span>Poverljiva aktivacija klijenta ({state.activeTenantId})</span>
                   </div>
+                  <p className="text-xs text-slate-300 leading-relaxed">
+                    Ova instalacija koristi izolovanu putanju i ne sadrži ključ u QR kodu.
+                    Unesite interni E2EE ključ vaše kompanije za lokalno šifrovanje i
+                    sinhronizaciju sa dispečerskim centrom.
+                  </p>
+                  <input
+                    type="password"
+                    value={e2eeInput}
+                    onChange={(e) => setE2eeInput(e.target.value)}
+                    placeholder="Unesite E2EE ključ kompanije..."
+                    className="w-full min-h-[44px] bg-slate-950 border border-slate-700 rounded-xl px-3 text-sm font-mono text-slate-100"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (e2eeInput.trim()) unlockMobileE2ee(e2eeInput);
+                    }}
+                    className="w-full min-h-[48px] rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm cursor-pointer"
+                  >
+                    Otključaj lokalni trezor
+                  </button>
+                </div>
+              </main>
+            ) : !driver ? (
+              <main className="flex-1 overflow-y-auto px-4 py-6 space-y-4">
+                <PWAInstallButton tenantName={state.activeTenantId || 'ŽP Kabina'} />
+                {syncError && (
+                  <div className="p-3 rounded-xl bg-red-950/70 border border-red-700 text-xs text-red-200 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span>{syncError}</span>
+                  </div>
+                )}
+                <div className="p-5 rounded-2xl bg-slate-900 border border-slate-800 space-y-2 text-center">
+                  <TrainFront className="w-8 h-8 text-amber-400 mx-auto" />
+                  <h2 className="text-sm font-bold text-slate-100">
+                    Kabinski trezor čeka sinhronizaciju
+                  </h2>
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {state.activeTenantId
+                      ? 'Dodajte mašinovođu i smenu na Upravnom desktopu — šifrovana koverta će se automatski pojaviti u ovoj kabini.'
+                      : 'Otvorite Početni ekran (ikona knjige gore) ili skenirajte personalizovani QR kod sa Upravnog desktopa.'}
+                  </p>
+                </div>
+              </main>
+            ) : (
+              <main className="flex-1 overflow-y-auto px-4 py-4 space-y-4">
+                {/* Specialized PWA Install Prompt (hides automatically in standalone mode) */}
+                <PWAInstallButton tenantName={state.activeTenantId || 'ŽP Kabina'} />
+
+                {syncError && (
+                  <div className="p-3 rounded-xl bg-red-950/70 border border-red-700 text-xs text-red-200 flex items-start gap-2">
+                    <AlertTriangle className="w-4 h-4 shrink-0 text-red-400 mt-0.5" />
+                    <span>{syncError}</span>
+                  </div>
+                )}
+
+                {feedbackMsg && (
+                  <div
+                    role="status"
+                    className="px-3 py-2.5 rounded-xl bg-emerald-900/60 border border-emerald-600/60 text-emerald-100 text-xs font-medium flex items-center gap-2"
+                  >
+                    <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                    <span>{feedbackMsg}</span>
+                  </div>
+                )}
+
+                {tab === 'shifts' && (
+                  <div className="space-y-4">
+                    <section className="p-4 rounded-2xl bg-slate-900 border border-slate-800">
+                      <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
+                        <span>Obavezni dnevni odmor (lokalni motor)</span>
+                        <span className="font-mono">
+                          {driver.lastShiftEndedAwayFromBase
+                            ? `Van baze (min ${mob.ruleConfig.minRestAwayHours}h)`
+                            : `Baza (min ${mob.ruleConfig.minRestHomeHours}h)`}
+                        </span>
+                      </div>
                   <div className="flex items-baseline justify-between mt-1">
                     <div className="text-2xl font-bold font-mono tabular-nums text-slate-50">
                       {restInfo.remaining > 0
@@ -660,6 +733,12 @@ export const DriverMobileView: React.FC = () => {
                     Primopredaja službenog vozila
                   </h2>
 
+                  {mob.vehicles.length === 0 ? (
+                    <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 text-xs text-slate-400 text-center">
+                      Nema dodeljenih službenih vozila u lokalnom trezoru. Dodajte vozilo na Upravnom desktopu.
+                    </div>
+                  ) : (
+                  <>
                   <div>
                     <label className="block text-xs text-slate-400 mb-1">
                       Službeno vozilo
@@ -799,6 +878,8 @@ export const DriverMobileView: React.FC = () => {
                   >
                     Potvrdi primopredaju vozila
                   </button>
+                  </>
+                  )}
                 </section>
               </form>
             )}
@@ -903,6 +984,8 @@ export const DriverMobileView: React.FC = () => {
             );
           })}
         </nav>
+          </>
+        )}
       </div>
     </div>
   );

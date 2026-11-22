@@ -8,7 +8,7 @@ export type StationName =
   | 'Dimitrovgrad'
   | 'Subotica';
 
-export type ClientOperator = 'Srbija Kargo Klijent A' | 'Privatni Operater B';
+export type ClientOperator = string;
 
 export type DriverStatus =
   | 'Dostupan'
@@ -209,6 +209,8 @@ export interface AiAuditReport {
 }
 
 export type SyncActionType =
+  | 'DRIVER_ADDED'
+  | 'VEHICLE_ADDED'
   | 'SHIFT_ASSIGNED'
   | 'DISPATCH_MESSAGE'
   | 'RULE_CONFIG_UPDATED'
@@ -327,6 +329,8 @@ export interface SystemState {
   activeTenantId: string;
   activePathwayToken: string;
   activeMobileDriverId: string;
+  desktopStartAccepted: boolean;
+  mobileStartAccepted: boolean;
   offlineTunnelMode: boolean;
   officeOfflineMode: boolean;
   rollingWindowSize: number;

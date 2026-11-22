@@ -1,0 +1,6 @@
+{
+  "name": "Železnički Pogon — Sistem za upravljanje mašinovođama, smenama i voznim parkom",
+  "description": "Integrisani prototip za uslužno ustupanje mašinovođa: mobilna aplikacija za kabinu lokomotive, deterministički server motor pravila i dispečerski upravni desktop.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

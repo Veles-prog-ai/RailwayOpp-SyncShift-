@@ -20,6 +20,7 @@ import { PWAInstallButton } from '../../components/PWAInstallButton';
 import { StartScreen } from '../../components/StartScreen';
 import {
   evaluateShiftAssignment,
+  getDriverEffectiveStatus,
   getDriverRemainingRestHours,
 } from '../../core/ruleEngine';
 import { useSystem } from '../../core/store';
@@ -63,6 +64,10 @@ export const DriverMobileView = () => {
   const restInfo = driver
     ? getDriverRemainingRestHours(driver, mob.ruleConfig, nowTick)
     : { elapsed: 0, required: mob.ruleConfig.minRestHomeHours, remaining: 0 };
+
+  const effectiveStatus = driver
+    ? getDriverEffectiveStatus(driver, mob.ruleConfig, nowTick)
+    : 'Dostupan';
 
   const localPendingCount = mob.outbox.filter(
     (e) => e.deliveryState === 'local_only'
@@ -394,10 +399,16 @@ export const DriverMobileView = () => {
                         </div>
                         <span
                           className={`text-xs font-semibold ${
-                            restInfo.remaining > 0 ? 'text-amber-400' : 'text-emerald-400'
+                            effectiveStatus === 'Dostupan'
+                              ? 'text-emerald-400'
+                              : effectiveStatus === 'Na smeni'
+                              ? 'text-sky-400'
+                              : effectiveStatus === 'Vanredno angažovan'
+                              ? 'text-red-400'
+                              : 'text-amber-400'
                           }`}
                         >
-                          {driver.status}
+                          {effectiveStatus}
                         </span>
                       </div>
                       <div className="mt-3 h-2 w-full bg-slate-800 rounded-full overflow-hidden">

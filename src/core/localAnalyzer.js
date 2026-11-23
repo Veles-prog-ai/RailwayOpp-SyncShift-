@@ -10,24 +10,26 @@ export function runLocalDeterministicAudit(node) {
 
   // 1. Check vehicles for service proximity, low fuel, missing equipment, or sudden fuel drop notes
   for (const v of node.vehicles) {
-    const kmLeft = v.nextServiceKm - v.mileageKm;
+    const kmLeft = (Number(v.nextServiceKm) || 0) - (Number(v.mileageKm) || 0);
     if (kmLeft <= 1000) {
       anomalies.push({
         severity: 'visok',
         title: `Servisni prag blizu (${v.plate})`,
-        detail: `${v.model} (${v.plate}) je na ${v.mileageKm.toLocaleString('sr-RS')} km — preostalo samo ${kmLeft} km do servisa na ${v.nextServiceKm.toLocaleString('sr-RS')} km.`,
+        detail: `${v.model} (${v.plate}) je na ${(Number(v.mileageKm) || 0).toLocaleString('sr-RS')} km — preostalo samo ${kmLeft} km do servisa na ${(Number(v.nextServiceKm) || 0).toLocaleString('sr-RS')} km.`,
         affectedEntity: `${v.model} ${v.plate}`,
       });
     }
-    if (v.fuelPercent <= 35 || v.conditionNote.toLowerCase().includes('pad goriva')) {
+    const fuel = Number(v.fuelPercent) || 0;
+    const note = (v.conditionNote || '').toLowerCase();
+    if (fuel <= 35 || note.includes('pad goriva')) {
       anomalies.push({
         severity: 'srednji',
         title: `Disbalans goriva na vozilu ${v.plate}`,
-        detail: `Nivo goriva je ${v.fuelPercent}% u stanici ${v.currentStation}. Napomena: ${v.conditionNote}`,
+        detail: `Nivo goriva je ${fuel}% u stanici ${v.currentStation}. Napomena: ${v.conditionNote || 'Nema napomene'}`,
         affectedEntity: `${v.model} ${v.plate}`,
       });
     }
-    if (!v.equipment.dokumentacija || !v.equipment.radioStanica || !v.equipment.ključevi) {
+    if (!v.equipment || !v.equipment.dokumentacija || !v.equipment.radioStanica || !v.equipment.ključevi) {
       anomalies.push({
         severity: 'visok',
         title: `Nepotpuna oprema vozila ${v.plate}`,

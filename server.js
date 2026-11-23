@@ -24,6 +24,15 @@ const tenantRegistry = new Map();
 const licenseRegistry = new Map();
 const apiLogs = [];
 
+const ADMIN_API_KEY = process.env.ADMIN_API_KEY || '';
+let adminPasswordHash = null;
+let adminPasswordSalt = null;
+const activeAdminSessions = new Set();
+
+function hashAdminPassword(password, salt) {
+  return crypto.scryptSync(password, salt, 64).toString('hex');
+}
+
 function signLicensePayload(tenantId, plan, maxDrivers, expiresAt) {
   const payload = `${tenantId}|${plan}|${maxDrivers}|${expiresAt}`;
   const signature = crypto
@@ -43,6 +52,7 @@ function clearServerState() {
   tenantRegistry.clear();
   licenseRegistry.clear();
   apiLogs.length = 0;
+  activeAdminSessions.clear();
 }
 
 clearServerState();
@@ -103,7 +113,10 @@ async function startServer() {
   app.use('/api', (req, res, next) => {
     res.setHeader('Access-Control-Allow-Origin', allowedOrigin);
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, X-Pathway-Token');
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, X-Pathway-Token, X-Admin-Token, Authorization'
+    );
     if (req.method === 'OPTIONS') {
       res.status(204).end();
       return;
@@ -330,6 +343,103 @@ async function startServer() {
         },
       ],
     });
+  });
+
+  // --- SERVICE PROVIDER ADMIN AUTHENTICATION ---
+  app.get('/api/admin/auth/status', (_req, res) => {
+    const isConfigured = Boolean(ADMIN_API_KEY || adminPasswordHash);
+    res.json({
+      isConfigured,
+      requiresClaim: !ADMIN_API_KEY && !adminPasswordHash,
+      hasEnvKey: Boolean(ADMIN_API_KEY),
+    });
+  });
+
+  app.post('/api/admin/auth/claim', (req, res) => {
+    if (ADMIN_API_KEY || adminPasswordHash) {
+      res.status(403).json({ error: 'Administratorski pristup je već konfigurisan.' });
+      return;
+    }
+    const password = String(req.body?.password || '').trim();
+    if (password.length < 6) {
+      res.status(400).json({ error: 'Lozinka mora imati najmanje 6 karaktera.' });
+      return;
+    }
+    adminPasswordSalt = crypto.randomBytes(16).toString('hex');
+    adminPasswordHash = hashAdminPassword(password, adminPasswordSalt);
+    const token = `adm_${crypto.randomBytes(24).toString('hex')}`;
+    activeAdminSessions.add(token);
+    res.json({ ok: true, token });
+  });
+
+  app.post('/api/admin/auth/login', (req, res) => {
+    const credential = String(req.body?.credential || '').trim();
+    if (!credential) {
+      res.status(400).json({ error: 'Unesite administratorsku lozinku ili API ključ.' });
+      return;
+    }
+
+    if (ADMIN_API_KEY && safeTokenCompare(credential, ADMIN_API_KEY)) {
+      const token = `adm_${crypto.randomBytes(24).toString('hex')}`;
+      activeAdminSessions.add(token);
+      res.json({ ok: true, token });
+      return;
+    }
+
+    if (adminPasswordHash && adminPasswordSalt) {
+      const computed = hashAdminPassword(credential, adminPasswordSalt);
+      if (safeTokenCompare(computed, adminPasswordHash)) {
+        const token = `adm_${crypto.randomBytes(24).toString('hex')}`;
+        activeAdminSessions.add(token);
+        res.json({ ok: true, token });
+        return;
+      }
+    }
+
+    res.status(401).json({ error: 'Neispravna administratorska lozinka ili ključ.' });
+  });
+
+  app.post('/api/admin/auth/logout', (req, res) => {
+    const token =
+      req.header('X-Admin-Token') ||
+      req.header('Authorization')?.replace(/^Bearer\s+/i, '') ||
+      '';
+    if (token) {
+      activeAdminSessions.delete(token);
+    }
+    res.json({ ok: true });
+  });
+
+  const requireAdminAuth = (req, res, next) => {
+    const token =
+      req.header('X-Admin-Token') ||
+      req.header('Authorization')?.replace(/^Bearer\s+/i, '') ||
+      '';
+    if (!token) {
+      res.status(401).json({ error: 'Zahtevana je autorizacija servisnog administratora.' });
+      return;
+    }
+
+    if (ADMIN_API_KEY && safeTokenCompare(token, ADMIN_API_KEY)) {
+      next();
+      return;
+    }
+
+    if (activeAdminSessions.has(token)) {
+      next();
+      return;
+    }
+
+    res.status(403).json({ error: 'Neispravan ili istekao administratorski token.' });
+  };
+
+  // Protect all /api/admin/* endpoints with requireAdminAuth (except /api/admin/auth/*)
+  app.use('/api/admin', (req, res, next) => {
+    if (req.path.startsWith('/auth/')) {
+      next();
+      return;
+    }
+    requireAdminAuth(req, res, next);
   });
 
   // --- SERVICE PROVIDER ADMIN ROUTES ---
@@ -578,11 +688,6 @@ async function startServer() {
     });
 
     res.json({ passed: results.every((r) => r.ok), results });
-  });
-
-  app.post('/api/gateway/reset', (_req, res) => {
-    clearServerState();
-    res.json({ ok: true });
   });
 
   app.post('/api/admin/purge', (_req, res) => {

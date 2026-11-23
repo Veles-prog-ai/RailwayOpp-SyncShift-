@@ -1015,6 +1015,9 @@ export function SystemProvider({ children }) {
         id: input.shiftId,
         startTime: input.startTime,
         endTime: input.endTime,
+        routeFrom: input.routeFrom,
+        routeTo: input.routeTo,
+        trainNumber: input.trainNumber,
         segments,
       },
       existingShifts: office.shifts,
@@ -1385,13 +1388,18 @@ export function SystemProvider({ children }) {
           ? 'U upotrebi'
           : 'Parkirano';
 
+      const validMileage = Math.max(
+        vehicle.mileageKm || 0,
+        Number(input.mileageKm) || vehicle.mileageKm || 0
+      );
+
       const updatedVehicle = {
         ...vehicle,
         currentStation: input.station,
         status: nextStatus,
         assignedDriverId: input.action === 'PREUZIMANJE' ? input.driverId : null,
-        mileageKm: input.mileageKm,
-        fuelPercent: input.fuelPercent,
+        mileageKm: validMileage,
+        fuelPercent: Math.max(0, Math.min(100, Number(input.fuelPercent) || 0)),
         conditionNote: input.conditionNote,
         equipment: input.equipment,
         lastHandoverAt: nowIso,

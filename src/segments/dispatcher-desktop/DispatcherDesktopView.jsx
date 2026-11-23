@@ -33,6 +33,7 @@ import {
 import {
   calculateShiftDurations,
   evaluateShiftAssignment,
+  getDriverEffectiveStatus,
   getDriverRemainingRestHours,
 } from '../../core/ruleEngine';
 import { useSystem } from '../../core/store';
@@ -131,11 +132,24 @@ export const DispatcherDesktopView = () => {
         id: editingShiftId,
         startTime: startIso,
         endTime: endIso,
+        routeFrom: formFrom,
+        routeTo: formTo,
+        trainNumber: formTrain,
       },
       existingShifts: office.shifts,
       config: office.ruleConfig,
     });
-  }, [selectedDriver, formStart, formEnd, editingShiftId, office.shifts, office.ruleConfig]);
+  }, [
+    selectedDriver,
+    formStart,
+    formEnd,
+    editingShiftId,
+    formFrom,
+    formTo,
+    formTrain,
+    office.shifts,
+    office.ruleConfig,
+  ]);
 
   const openNewShiftModal = (preselectedDriverId) => {
     setEditingShiftId(undefined);
@@ -589,6 +603,7 @@ export const DispatcherDesktopView = () => {
               <div className="divide-y divide-slate-200">
                 {office.drivers.map((drv) => {
                   const rest = getDriverRemainingRestHours(drv, office.ruleConfig);
+                  const effectiveStatus = getDriverEffectiveStatus(drv, office.ruleConfig);
                   const drvShifts = office.shifts.filter((s) => s.driverId === drv.id);
 
                   return (
@@ -601,16 +616,16 @@ export const DispatcherDesktopView = () => {
                           <span className="font-semibold text-slate-900">{drv.name}</span>
                           <span
                             className={`text-xs font-semibold ${
-                              drv.status === 'Dostupan'
+                              effectiveStatus === 'Dostupan'
                                 ? 'text-emerald-700'
-                                : drv.status === 'Na smeni'
+                                : effectiveStatus === 'Na smeni'
                                 ? 'text-sky-700'
-                                : drv.status === 'Vanredno angažovan'
+                                : effectiveStatus === 'Vanredno angažovan'
                                 ? 'text-red-700'
                                 : 'text-amber-700'
                             }`}
                           >
-                            {drv.status}
+                            {effectiveStatus}
                           </span>
                         </div>
                         <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">

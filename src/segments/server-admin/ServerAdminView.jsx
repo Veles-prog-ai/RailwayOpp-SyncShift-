@@ -5,9 +5,12 @@ import {
   Building2,
   CheckCircle2,
   Key,
+  Lock,
+  LogOut,
   Plus,
   RefreshCw,
   Server,
+  ShieldAlert,
   ShieldCheck,
   Terminal,
   Trash2,
@@ -27,6 +30,12 @@ export const ServerAdminView = () => {
 
   const [adminTab, setAdminTab] = useState('tenants');
 
+  const [adminToken, setAdminToken] = useState(null);
+  const [authStatus, setAuthStatus] = useState(null);
+  const [authInput, setAuthInput] = useState('');
+  const [authError, setAuthError] = useState(null);
+  const [isSubmittingAuth, setIsSubmittingAuth] = useState(false);
+
   const [tenants, setTenants] = useState([]);
   const [licenses, setLicenses] = useState([]);
   const [apiLogs, setApiLogs] = useState([]);
@@ -43,13 +52,46 @@ export const ServerAdminView = () => {
   const [verifyKeyInput, setVerifyKeyInput] = useState('');
   const [verifyResult, setVerifyResult] = useState(null);
 
+  const checkAuthStatus = useCallback(async () => {
+    try {
+      const resp = await apiFetch('/api/admin/auth/status');
+      if (resp.ok) {
+        const data = await resp.json();
+        setAuthStatus(data);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    void checkAuthStatus();
+  }, [checkAuthStatus]);
+
+  const adminFetch = useCallback(
+    async (path, init = {}) => {
+      const headers = {
+        ...(init.headers || {}),
+        'X-Admin-Token': adminToken || '',
+      };
+      const res = await apiFetch(path, { ...init, headers });
+      if (res.status === 401 || res.status === 403) {
+        setAdminToken(null);
+        setAuthError('Administratorska sesija je nevažeća ili je istekla.');
+      }
+      return res;
+    },
+    [adminToken]
+  );
+
   const fetchAdminData = useCallback(async () => {
+    if (!adminToken) return;
     try {
       const [tResp, lResp, logResp, dResp] = await Promise.all([
-        apiFetch('/api/admin/tenants'),
-        apiFetch('/api/admin/licenses'),
-        apiFetch(`/api/admin/api-logs?tenantId=${encodeURIComponent(apiTenantFilter)}`),
-        apiFetch('/api/admin/diagnostics'),
+        adminFetch('/api/admin/tenants'),
+        adminFetch('/api/admin/licenses'),
+        adminFetch(`/api/admin/api-logs?tenantId=${encodeURIComponent(apiTenantFilter)}`),
+        adminFetch('/api/admin/diagnostics'),
       ]);
       if (tResp.ok) {
         const d = await tResp.json();
@@ -76,19 +118,73 @@ export const ServerAdminView = () => {
     } catch {
       // ignore fetch error
     }
-  }, [apiTenantFilter]);
+  }, [adminFetch, adminToken, apiTenantFilter]);
 
   useEffect(() => {
-    void fetchAdminData();
-  }, [fetchAdminData, adminTab, state.activeTenantId]);
+    if (adminToken) {
+      void fetchAdminData();
+    }
+  }, [fetchAdminData, adminTab, state.activeTenantId, adminToken]);
 
   const activeTenantObj =
     tenants.find((t) => t.tenantId === state.activeTenantId) || tenants[0];
 
+  const handleLoginOrClaim = async (e) => {
+    e.preventDefault();
+    if (!authInput.trim()) return;
+    setAuthError(null);
+    setIsSubmittingAuth(true);
+
+    const endpoint = authStatus?.requiresClaim
+      ? '/api/admin/auth/claim'
+      : '/api/admin/auth/login';
+
+    const payload = authStatus?.requiresClaim
+      ? { password: authInput.trim() }
+      : { credential: authInput.trim() };
+
+    try {
+      const resp = await apiFetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await resp.json().catch(() => ({}));
+      if (resp.ok && data.token) {
+        setAdminToken(data.token);
+        setAuthInput('');
+        setAuthError(null);
+        await checkAuthStatus();
+      } else {
+        setAuthError(data.error || 'Neuspešna autorizacija.');
+      }
+    } catch {
+      setAuthError('Greška pri povezivanju sa serverom.');
+    } finally {
+      setIsSubmittingAuth(false);
+    }
+  };
+
+  const handleLogout = async () => {
+    if (adminToken) {
+      await apiFetch('/api/admin/auth/logout', {
+        method: 'POST',
+        headers: { 'X-Admin-Token': adminToken },
+      }).catch(() => {});
+    }
+    setAdminToken(null);
+    setTenants([]);
+    setLicenses([]);
+    setApiLogs([]);
+    setDiagnostics(null);
+    await checkAuthStatus();
+  };
+
   const handleCreateTenant = async (e) => {
     e.preventDefault();
     if (!newClientName.trim()) return;
-    const resp = await apiFetch('/api/admin/tenants', {
+    const resp = await adminFetch('/api/admin/tenants', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ clientName: newClientName.trim() }),
@@ -104,7 +200,7 @@ export const ServerAdminView = () => {
   };
 
   const handleRotateToken = async (tenantId) => {
-    const resp = await apiFetch(
+    const resp = await adminFetch(
       `/api/admin/tenants/${encodeURIComponent(tenantId)}/rotate-token`,
       {
         method: 'POST',
@@ -122,7 +218,7 @@ export const ServerAdminView = () => {
   const handleGenerateLicense = async (e) => {
     e.preventDefault();
     if (!licTenantId) return;
-    const resp = await apiFetch('/api/admin/licenses/generate', {
+    const resp = await adminFetch('/api/admin/licenses/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -143,7 +239,7 @@ export const ServerAdminView = () => {
   };
 
   const handleToggleLicense = async (licenseId) => {
-    await apiFetch(`/api/admin/licenses/${encodeURIComponent(licenseId)}/toggle-status`, {
+    await adminFetch(`/api/admin/licenses/${encodeURIComponent(licenseId)}/toggle-status`, {
       method: 'POST',
     });
     await fetchAdminData();
@@ -152,7 +248,7 @@ export const ServerAdminView = () => {
 
   const handleVerifyLicense = async (e) => {
     e.preventDefault();
-    const resp = await apiFetch('/api/admin/licenses/verify', {
+    const resp = await adminFetch('/api/admin/licenses/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ licenseKey: verifyKeyInput }),
@@ -164,7 +260,7 @@ export const ServerAdminView = () => {
   };
 
   const handleRunSelfTest = async () => {
-    const resp = await apiFetch('/api/admin/diagnostics/self-test', { method: 'POST' });
+    const resp = await adminFetch('/api/admin/diagnostics/self-test', { method: 'POST' });
     if (resp.ok) {
       const data = await resp.json();
       setSelfTestResults(data.results || []);
@@ -173,13 +269,73 @@ export const ServerAdminView = () => {
   };
 
   const handlePurgeServer = async () => {
-    const resp = await apiFetch('/api/admin/purge', { method: 'POST' });
+    const resp = await adminFetch('/api/admin/purge', { method: 'POST' });
     if (resp.ok) {
       setSelfTestResults([]);
       setVerifyResult(null);
       await fetchAdminData();
     }
   };
+
+  if (!adminToken) {
+    return (
+      <div className="min-h-screen bg-slate-900 text-slate-100 flex items-center justify-center p-4">
+        <div className="w-full max-w-md p-8 rounded-2xl bg-slate-950 border border-slate-800 shadow-2xl space-y-6">
+          <div className="text-center space-y-2">
+            <div className="w-12 h-12 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto text-amber-400">
+              <Lock className="w-6 h-6" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight">
+              {authStatus?.requiresClaim
+                ? 'Prvo podešavanje administratora'
+                : 'Servisni provajder · Admin prijava'}
+            </h1>
+            <p className="text-xs text-slate-400 leading-relaxed">
+              {authStatus?.requiresClaim
+                ? 'Unesite novu administratorsku lozinku (minimum 6 karaktera) da biste zaključali i osigurali konzolu servis provajdera.'
+                : 'Unesite administratorsku lozinku ili API ključ za pristup konzoli provajdera.'}
+            </p>
+          </div>
+
+          {authError && (
+            <div className="p-3 rounded-xl bg-red-950/60 border border-red-800/80 text-xs text-red-200 flex items-start gap-2">
+              <ShieldAlert className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <span>{authError}</span>
+            </div>
+          )}
+
+          <form onSubmit={handleLoginOrClaim} className="space-y-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                {authStatus?.requiresClaim ? 'Nova administratorska lozinka' : 'Lozinka ili Admin API ključ'}
+              </label>
+              <input
+                type="password"
+                value={authInput}
+                onChange={(e) => setAuthInput(e.target.value)}
+                placeholder={authStatus?.requiresClaim ? 'Unesite lozinku (min 6 karaktera)...' : 'Unesite lozinku...'}
+                className="w-full px-3.5 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-slate-100 text-sm focus:outline-none focus:border-amber-500"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              disabled={isSubmittingAuth}
+              className="w-full py-3 px-4 rounded-xl bg-amber-500 hover:bg-amber-600 text-slate-950 font-bold text-sm transition-colors cursor-pointer disabled:opacity-50 flex items-center justify-center gap-2"
+            >
+              <Key className="w-4 h-4" />
+              <span>{authStatus?.requiresClaim ? 'Aktiviraj i zaključaj admin nalog' : 'Prijavi se u konzolu'}</span>
+            </button>
+          </form>
+
+          <div className="pt-4 border-t border-slate-900 text-center text-xs text-slate-500">
+            Zaštićeno Hashed scrypt-om i X-Admin-Token sesijom.
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900">
@@ -237,6 +393,15 @@ export const ServerAdminView = () => {
           >
             <Trash2 className="w-3.5 h-3.5" />
             <span>Isprazni server</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-700 flex items-center gap-1.5 cursor-pointer"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Odjava</span>
           </button>
         </div>
       </div>

@@ -43,10 +43,40 @@ function classifyTelemetry(type) {
   }
 }
 
+function normalizeSegmentValue(raw) {
+  if (!raw) return null;
+  const val = String(raw).trim().toLowerCase();
+  if (val === 'landing' || val === 'portal') return 'landing';
+  if (val === 'mobile') return 'mobile';
+  if (val === 'admin') return 'admin';
+  if (val === 'desktop' || val === 'dispatcher') return 'desktop';
+  return null;
+}
+
+function resolveSegmentFromLocation() {
+  if (typeof window !== 'undefined') {
+    const pathSeg = normalizeSegmentValue(window.location.pathname.replace(/^\/+|\/+$/g, '').split('/')[0]);
+    if (pathSeg) return pathSeg;
+
+    const params = new URLSearchParams(window.location.search);
+    const querySeg = normalizeSegmentValue(params.get('segment'));
+    if (querySeg) return querySeg;
+  }
+
+  // Optional on-demand promotion from terminal (VITE_INSPECT_SEGMENT / INSPECT_SEGMENT)
+  const promoted =
+    typeof __STUDIO_PROMOTED_SEGMENT__ !== 'undefined'
+      ? normalizeSegmentValue(__STUDIO_PROMOTED_SEGMENT__)
+      : null;
+  if (promoted) return promoted;
+
+  return 'hub';
+}
+
 function readUrlBootParams() {
   if (typeof window === 'undefined') {
     return {
-      segment: null,
+      segment: resolveSegmentFromLocation(),
       tenant: null,
       pathway: null,
       driver: null,
@@ -60,15 +90,11 @@ function readUrlBootParams() {
     : window.location.hash;
   const hashParams = new URLSearchParams(hashRaw);
 
-  const seg = params.get('segment');
   const e2eeFromHash = hashParams.get('e2ee');
   const e2eeFromQuery = params.get('e2ee');
 
   return {
-    segment:
-      seg === 'landing' || seg === 'mobile' || seg === 'admin' || seg === 'dispatcher'
-        ? seg
-        : null,
+    segment: resolveSegmentFromLocation(),
     tenant: params.get('tenant'),
     pathway: params.get('pathway'),
     driver: params.get('driver'),
@@ -153,14 +179,7 @@ function loadInitialState() {
 
   return {
     ...base,
-    activeSegment:
-      boot.segment ||
-      (meta.activeSegment === 'landing' ||
-      meta.activeSegment === 'mobile' ||
-      meta.activeSegment === 'admin' ||
-      meta.activeSegment === 'dispatcher'
-        ? meta.activeSegment
-        : 'landing'),
+    activeSegment: boot.segment,
     activeTenantId: tenantId,
     activePathwayToken: pathwayToken,
     activeMobileDriverId: resolvedDriverId,
@@ -414,7 +433,6 @@ export function SystemProvider({ children }) {
       localStorage.setItem(
         META_STORAGE_KEY,
         JSON.stringify({
-          activeSegment: state.activeSegment,
           activeTenantId: state.activeTenantId,
           activePathwayToken: state.activePathwayToken,
           activeMobileDriverId: state.activeMobileDriverId,
@@ -759,17 +777,6 @@ export function SystemProvider({ children }) {
     }, 3000);
     return () => clearInterval(id);
   }, [triggerGatewaySync]);
-
-  const setActiveSegment = (seg) => {
-    setState((prev) => ({ ...prev, activeSegment: seg }));
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set('segment', seg);
-      window.history.replaceState({}, '', url.toString());
-    } catch {
-      // ignore
-    }
-  };
 
   const configureConnection = ({ tenantId, pathwayToken, fleetPassphrase }) => {
     const cleanTenant = tenantId.trim();
@@ -1605,7 +1612,6 @@ export function SystemProvider({ children }) {
         state,
         gatewaySnapshot,
         syncError,
-        setActiveSegment,
         switchTenant,
         configureConnection,
         acceptDesktopStart,

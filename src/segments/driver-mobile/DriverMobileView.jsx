@@ -199,8 +199,8 @@ export const DriverMobileView = () => {
       : null;
 
   return (
-    <div className="min-h-[calc(100vh-64px)] bg-slate-950/95 py-0 sm:py-6 px-0 sm:px-4 flex justify-center items-start">
-      <div className="w-full sm:w-[390px] min-h-[calc(100vh-64px)] sm:min-h-[780px] sm:max-h-[840px] bg-slate-950 text-slate-100 sm:rounded-[32px] sm:border sm:border-slate-800 sm:shadow-2xl flex flex-col overflow-hidden relative">
+    <div className="min-h-screen bg-slate-950/95 py-0 sm:py-6 px-0 sm:px-4 flex justify-center items-start">
+      <div className="w-full sm:w-[390px] min-h-screen sm:min-h-[780px] sm:max-h-[840px] bg-slate-950 text-slate-100 sm:rounded-[32px] sm:border sm:border-slate-800 sm:shadow-2xl flex flex-col overflow-hidden relative">
         {!state.mobileStartAccepted ? (
           <StartScreen
             mode="mobile"

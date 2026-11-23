@@ -39,12 +39,12 @@ export const ClientQrProvisioner = ({
 
   const installUrl =
     linkMode === 'local-fragment'
-      ? `${origin}/?segment=mobile&tenant=${encodeURIComponent(
+      ? `${origin}/mobile?tenant=${encodeURIComponent(
           tenantId
         )}&pathway=${encodeURIComponent(pathwayToken)}${driverParam}#e2ee=${encodeURIComponent(
           fleetPassphrase
         )}`
-      : `${origin}/?segment=mobile&tenant=${encodeURIComponent(
+      : `${origin}/mobile?tenant=${encodeURIComponent(
           tenantId
         )}&pathway=${encodeURIComponent(pathwayToken)}${driverParam}&lock=1`;
 

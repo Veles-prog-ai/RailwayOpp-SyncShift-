@@ -4,11 +4,8 @@ import {
   Container,
   Download,
   ExternalLink,
-  KeyRound,
   Monitor,
-  QrCode,
   ShieldCheck,
-  Smartphone,
   Terminal,
 } from 'lucide-react';
 import { API_BASE_URL, apiUrl } from '../../core/apiClient';
@@ -54,7 +51,7 @@ const DESKTOP_PACKAGES = [
 ];
 
 export const LandingServerView = () => {
-  const { setActiveSegment, state } = useSystem();
+  const { state } = useSystem();
   const [heroImgFailed, setHeroImgFailed] = useState(false);
   const [deskImgFailed, setDeskImgFailed] = useState(false);
   const [lastDownloaded, setLastDownloaded] = useState(null);
@@ -69,7 +66,37 @@ export const LandingServerView = () => {
   };
 
   return (
-    <div className="bg-slate-50 text-slate-900">
+    <div className="min-h-screen bg-slate-50 text-slate-900">
+      {/* Standalone Server Landing Header */}
+      <header className="sticky top-0 z-30 h-16 bg-white border-b border-slate-200 px-4 sm:px-6 flex items-center justify-between gap-6">
+        <div className="max-w-[1200px] w-full mx-auto flex items-center justify-between gap-6">
+          <div className="text-base sm:text-lg font-bold tracking-tight whitespace-nowrap text-slate-900">
+            Železnički Pogon
+          </div>
+
+          <nav className="hidden sm:flex items-center gap-6 text-xs font-semibold text-slate-600">
+            <a href="#preuzimanje-desktop" className="hover:text-slate-900">
+              Desktop paketi
+            </a>
+            <a href="#lokalni-qr" className="hover:text-slate-900">
+              Lokalni QR i privatnost
+            </a>
+            <a href={apiUrl('/landing')} className="hover:text-slate-900">
+              Serverski portal
+            </a>
+          </nav>
+
+          <button
+            type="button"
+            onClick={scrollToDownloads}
+            className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap cursor-pointer transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>Preuzmi Desktop</span>
+          </button>
+        </div>
+      </header>
+
       {/* 1. HERO SECTION */}
       <section className="max-w-[1200px] mx-auto px-4 sm:px-6 pt-10 pb-14">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-stretch">
@@ -108,14 +135,13 @@ export const LandingServerView = () => {
                 <span>Preuzmi Desktop aplikaciju</span>
               </button>
 
-              <button
-                type="button"
-                onClick={() => setActiveSegment('dispatcher')}
-                className="px-4 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-900 text-sm font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer transition-colors"
+              <a
+                href="/desktop"
+                className="px-4 py-3 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-900 text-sm font-semibold flex items-center gap-2 whitespace-nowrap transition-colors"
               >
-                <span>Otvori Upravni desktop</span>
+                <span>Pokreni Upravni desktop</span>
                 <ArrowRight className="w-4 h-4" />
-              </button>
+              </a>
             </div>
           </div>
 
@@ -232,7 +258,10 @@ export const LandingServerView = () => {
       </section>
 
       {/* 3. ZERO-KNOWLEDGE LOCAL QR & SECURE LINK ARCHITECTURE */}
-      <section className="border-t border-slate-200 bg-slate-50 py-14">
+      <section
+        id="lokalni-qr"
+        className="border-t border-slate-200 bg-slate-50 py-14"
+      >
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 space-y-8">
           <div className="flex flex-wrap items-end justify-between gap-4">
             <div className="space-y-2 max-w-2xl">
@@ -249,14 +278,15 @@ export const LandingServerView = () => {
               </p>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setActiveSegment('dispatcher')}
-              className="px-4 py-2.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold flex items-center gap-2 whitespace-nowrap cursor-pointer"
+            <a
+              href={apiUrl('/landing')}
+              target="_blank"
+              rel="noreferrer"
+              className="px-4 py-2.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold inline-flex items-center gap-2 whitespace-nowrap"
             >
-              <QrCode className="w-4 h-4" />
-              <span>Generiši QR na Upravnom desktopu</span>
-            </button>
+              <span>Čista serverska stranica (/landing)</span>
+              <ExternalLink className="w-3.5 h-3.5" />
+            </a>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -308,93 +338,8 @@ export const LandingServerView = () => {
         </div>
       </section>
 
-      {/* 4. SYSTEM SEGMENTS LAUNCHER */}
-      <section className="border-t border-slate-200 bg-white py-14">
-        <div className="max-w-[1200px] mx-auto px-4 sm:px-6 space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-slate-900">
-              Povezana celina iz 3 nezavisna segmenta
-            </h2>
-            <a
-              href={apiUrl('/landing')}
-              target="_blank"
-              rel="noreferrer"
-              className="text-xs font-semibold text-slate-700 hover:text-slate-900 inline-flex items-center gap-1.5 underline underline-offset-4"
-            >
-              <span>Otvori čistu serversku stranicu (/landing)</span>
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Monitor className="w-4 h-4 text-slate-700" />
-                  <span>Upravni desktop (Dispečer)</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Lokalni trezor operatera, planiranje smena, obračun za fakturisanje i
-                  lokalni generator personalizovanih QR kodova za mašinovođe.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveSegment('dispatcher')}
-                className="py-2 px-3.5 rounded-lg bg-slate-900 hover:bg-slate-800 text-white text-xs font-semibold text-left flex items-center justify-between cursor-pointer"
-              >
-                <span>Pokreni Upravni desktop</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <Smartphone className="w-4 h-4 text-slate-700" />
-                  <span>Mobilna aplikacija (Mašinovođa)</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Tamni noćni režim za lokomotivsku kabinu, evidencija vožnje, predaja
-                  službenih vozila i offline sinhronizacija po izlasku iz tunela.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveSegment('mobile')}
-                className="py-2 px-3.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold text-left flex items-center justify-between cursor-pointer"
-              >
-                <span>Otvori Kabinski prikaz</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 flex flex-col justify-between gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                  <KeyRound className="w-4 h-4 text-slate-700" />
-                  <span>Server & Admin konzola</span>
-                </div>
-                <p className="text-xs text-slate-600 leading-relaxed">
-                  Alat servis provajdera za izolovane putanje klijenata, generator HMAC
-                  licenci, API evidenciju i dijagnostiku E2EE gateway-a.
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setActiveSegment('admin')}
-                className="py-2 px-3.5 rounded-lg border border-slate-300 bg-white hover:bg-slate-100 text-slate-900 text-xs font-semibold text-left flex items-center justify-between cursor-pointer"
-              >
-                <span>Otvori Admin konzolu</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* 5. QUIET FOOTER */}
-      <footer className="border-t border-slate-200 bg-slate-50 py-8">
+      {/* 4. QUIET FOOTER */}
+      <footer className="border-t border-slate-200 bg-white py-8">
         <div className="max-w-[1200px] mx-auto px-4 sm:px-6 flex flex-wrap items-center justify-between gap-4 text-xs text-slate-500">
           <div className="flex items-center gap-2">
             <ShieldCheck className="w-4 h-4 text-slate-600" />

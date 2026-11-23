@@ -11,6 +11,11 @@ const __dirname = path.dirname(__filename);
 
 export default defineConfig(() => {
   return {
+    define: {
+      __STUDIO_PROMOTED_SEGMENT__: JSON.stringify(
+        process.env.VITE_INSPECT_SEGMENT || process.env.INSPECT_SEGMENT || ''
+      ),
+    },
     plugins: [
       react(),
       tailwindcss(),
@@ -18,7 +23,7 @@ export default defineConfig(() => {
         registerType: 'autoUpdate',
         includeAssets: ['icon.svg', 'apple-touch-icon.png'],
         manifest: {
-          id: '/?segment=mobile',
+          id: '/mobile',
           name: 'Železnički Pogon — Kabina Mašinovođe',
           short_name: 'ZP Kabina',
           description:
@@ -26,7 +31,7 @@ export default defineConfig(() => {
           theme_color: '#0f172a',
           background_color: '#020617',
           display: 'standalone',
-          start_url: '/?segment=mobile',
+          start_url: '/mobile',
           scope: '/',
           icons: [
             {

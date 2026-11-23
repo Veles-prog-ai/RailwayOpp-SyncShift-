@@ -310,14 +310,14 @@ async function startServer() {
     const shortClient = tenant ? tenant.clientName.slice(0, 12) : 'ZP Kabina';
     res.setHeader('Content-Type', 'application/manifest+json');
     res.json({
-      id: `/?segment=mobile&tenant=${encodeURIComponent(req.params.tenantId)}`,
+      id: `/mobile?tenant=${encodeURIComponent(req.params.tenantId)}`,
       name: tenant ? `${tenant.clientName} — Kabina` : 'Železnički Pogon — Kabina',
       short_name: shortClient,
       description: 'Specijalizovana aplikacija za mašinovođe sa lokalnim E2EE čuvanjem.',
       theme_color: '#0f172a',
       background_color: '#020617',
       display: 'standalone',
-      start_url: `/?segment=mobile&tenant=${encodeURIComponent(req.params.tenantId)}`,
+      start_url: `/mobile?tenant=${encodeURIComponent(req.params.tenantId)}`,
       scope: '/',
       icons: [
         { src: '/pwa-192x192.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
@@ -674,7 +674,7 @@ async function startServer() {
     const host = req.get('host') || `localhost:${PORT}`;
     const proto = req.get('x-forwarded-proto') || req.protocol || 'https';
     const baseUrl = `${proto}://${host}`;
-    const dispatcherUrl = `${baseUrl}/?segment=dispatcher`;
+    const dispatcherUrl = `${baseUrl}/desktop`;
 
     if (platform === 'docker') {
       res.setHeader('Content-Type', 'text/yaml; charset=utf-8');
@@ -826,10 +826,9 @@ async function startServer() {
       <nav>
         <a href="#preuzimanje">Desktop aplikacija</a>
         <a href="#bezbednost">Lokalni QR i linkovi</a>
-        <a href="/?segment=dispatcher">Upravni desktop</a>
-        <a href="/?segment=admin">Admin konzola</a>
+        <a href="/desktop">Upravni desktop</a>
       </nav>
-      <a class="cta" href="/?segment=dispatcher">Otvori radni portal</a>
+      <a class="cta" href="/desktop">Pokreni Upravni desktop</a>
     </div>
   </header>
 
@@ -842,7 +841,7 @@ async function startServer() {
         </p>
         <div class="actions">
           <a class="btn-primary" href="#preuzimanje">Preuzmi Desktop aplikaciju</a>
-          <a class="btn-secondary" href="/">Otvori aplikaciju</a>
+          <a class="btn-secondary" href="/desktop">Pokreni Desktop</a>
         </div>
       </div>
       <div>
@@ -901,7 +900,7 @@ async function startServer() {
 
   <footer class="container">
     <span>Železnički Pogon · Serverska početna stranica</span>
-    <span><a href="/?segment=dispatcher" style="color:inherit;">Upravni desktop</a> · <a href="/?segment=mobile" style="color:inherit;">Mobilna kabina</a> · <a href="/api/health" style="color:inherit;">Status servera</a></span>
+    <span><a href="/desktop" style="color:inherit;">Upravni desktop</a> · <a href="/mobile" style="color:inherit;">Mobilna kabina</a> · <a href="/api/health" style="color:inherit;">Status servera</a></span>
   </footer>
 </body>
 </html>`);

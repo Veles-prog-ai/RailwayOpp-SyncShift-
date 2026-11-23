@@ -182,13 +182,14 @@ export const ServerAdminView = () => {
   };
 
   return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
     <div className="max-w-[1380px] mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Service Provider Header & Tenant Channel Selector */}
       <div className="p-4 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-base font-bold text-slate-900 flex items-center gap-2">
             <Server className="w-4 h-4 text-slate-700" />
-            <span>Servis Provajder Admin Konzola — Multi-Tenant E2EE Gateway</span>
+            <span>Železnički Pogon · Servis Provajder Admin Konzola</span>
           </h1>
           <p className="text-xs text-slate-600 mt-0.5">
             Provajder upravlja isključivo izolovanim putanjama, licencama, API
@@ -420,14 +421,14 @@ export const ServerAdminView = () => {
                   readOnly
                   value={`${
                     typeof window !== 'undefined' ? window.location.origin : ''
-                  }/?segment=dispatcher&tenant=${encodeURIComponent(
+                  }/desktop?tenant=${encodeURIComponent(
                     activeTenantObj.tenantId
                   )}&pathway=${encodeURIComponent(activeTenantObj.pathwayToken)}`}
                   aria-label="Desktop inicijalizacioni link klijenta"
                   className="flex-1 min-w-[240px] px-3 py-2 rounded-lg border border-slate-300 bg-white font-mono text-[11px] text-slate-700"
                 />
                 <a
-                  href={`/?segment=dispatcher&tenant=${encodeURIComponent(
+                  href={`/desktop?tenant=${encodeURIComponent(
                     activeTenantObj.tenantId
                   )}&pathway=${encodeURIComponent(activeTenantObj.pathwayToken)}`}
                   className="px-3.5 py-2 rounded-lg bg-slate-900 hover:bg-slate-800 text-white font-semibold whitespace-nowrap"
@@ -893,6 +894,7 @@ export const ServerAdminView = () => {
           </section>
         </div>
       )}
+    </div>
     </div>
   );
 };

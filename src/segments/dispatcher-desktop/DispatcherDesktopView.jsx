@@ -425,12 +425,15 @@ export const DispatcherDesktopView = () => {
   }
 
   return (
+    <div className="min-h-screen bg-slate-50 text-slate-900">
     <div className="max-w-[1380px] mx-auto px-4 sm:px-6 py-6 space-y-6">
       {/* Local Office Vault & Gateway Sync Status Bar */}
       <div className="px-4 py-2.5 rounded-xl bg-white border border-slate-200 flex flex-wrap items-center justify-between gap-3 text-xs">
         <div className="flex flex-wrap items-center gap-3 text-slate-700">
+          <span className="font-bold text-slate-900">Železnički Pogon</span>
+          <span className="text-slate-300">|</span>
           <span className="font-semibold text-slate-900">
-            Lokalni Desktop / Docker Trezor ({state.activeTenantId || 'Lokalni rad'})
+            Upravni desktop ({state.activeTenantId || 'Lokalni rad'})
           </span>
           <span className="text-slate-400">·</span>
           <span className="font-mono">
@@ -1799,6 +1802,7 @@ export const DispatcherDesktopView = () => {
           </form>
         </div>
       )}
+    </div>
     </div>
   );
 };

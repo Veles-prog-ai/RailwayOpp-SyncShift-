@@ -14,16 +14,7 @@ import {
 import { API_BASE_URL, apiUrl } from '../../core/apiClient';
 import { useSystem } from '../../core/store';
 
-interface DownloadPackageItem {
-  id: 'windows' | 'docker' | 'linux' | 'mac';
-  title: string;
-  subtitle: string;
-  fileLabel: string;
-  href: string;
-  icon: 'monitor' | 'docker' | 'terminal';
-}
-
-const DESKTOP_PACKAGES: DownloadPackageItem[] = [
+const DESKTOP_PACKAGES = [
   {
     id: 'windows',
     title: 'Windows 10 / 11 Desktop',
@@ -62,11 +53,11 @@ const DESKTOP_PACKAGES: DownloadPackageItem[] = [
   },
 ];
 
-export const LandingServerView: React.FC = () => {
+export const LandingServerView = () => {
   const { setActiveSegment, state } = useSystem();
   const [heroImgFailed, setHeroImgFailed] = useState(false);
   const [deskImgFailed, setDeskImgFailed] = useState(false);
-  const [lastDownloaded, setLastDownloaded] = useState<string | null>(null);
+  const [lastDownloaded, setLastDownloaded] = useState(null);
 
   const serverOrigin =
     API_BASE_URL ||

@@ -37,14 +37,6 @@ import {
 } from '../../core/ruleEngine';
 import { useSystem } from '../../core/store';
 import {
-  AiAuditReport,
-  ClientOperator,
-  RuleConfig,
-  Shift,
-  StationName,
-  TelemetryClassification,
-} from '../../core/types';
-import {
   formatDateTimeSr,
   formatHours,
   formatTimeSr,
@@ -52,15 +44,7 @@ import {
   toLocalInputValue,
 } from '../../core/utils';
 
-type DispatcherTab =
-  | 'schedule'
-  | 'messaging'
-  | 'billing'
-  | 'fleet-engine'
-  | 'ai-audit'
-  | 'qr-access';
-
-export const DispatcherDesktopView: React.FC = () => {
+export const DispatcherDesktopView = () => {
   const {
     state,
     gatewaySnapshot,
@@ -82,23 +66,21 @@ export const DispatcherDesktopView: React.FC = () => {
     (e) => e.deliveryState !== 'acked'
   ).length;
 
-  const [activeTab, setActiveTab] = useState<DispatcherTab>('schedule');
-  const [configDraft, setConfigDraft] = useState<RuleConfig>(office.ruleConfig);
+  const [activeTab, setActiveTab] = useState('schedule');
+  const [configDraft, setConfigDraft] = useState(office.ruleConfig);
   const [configSavedNotice, setConfigSavedNotice] = useState(false);
-  const [telemetryFilter, setTelemetryFilter] = useState<
-    'SVE' | TelemetryClassification
-  >('SVE');
+  const [telemetryFilter, setTelemetryFilter] = useState('SVE');
 
   useEffect(() => {
     setConfigDraft(office.ruleConfig);
   }, [office.ruleConfig]);
 
   const [modalOpen, setModalOpen] = useState(false);
-  const [editingShiftId, setEditingShiftId] = useState<string | undefined>(undefined);
+  const [editingShiftId, setEditingShiftId] = useState(undefined);
   const [formDriverId, setFormDriverId] = useState(office.drivers[0]?.id || '');
-  const [formOperator, setFormOperator] = useState<ClientOperator>('');
-  const [formFrom, setFormFrom] = useState<StationName>('Beograd Centar');
-  const [formTo, setFormTo] = useState<StationName>('Lapovo');
+  const [formOperator, setFormOperator] = useState('');
+  const [formFrom, setFormFrom] = useState('Beograd Centar');
+  const [formTo, setFormTo] = useState('Lapovo');
   const [formTrain, setFormTrain] = useState('');
   const [formLoco, setFormLoco] = useState('');
   const [formStart, setFormStart] = useState(() =>
@@ -110,29 +92,27 @@ export const DispatcherDesktopView: React.FC = () => {
   const [formNotes, setFormNotes] = useState('');
   const [overrideEnabled, setOverrideEnabled] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
-  const [formError, setFormError] = useState<string | null>(null);
+  const [formError, setFormError] = useState(null);
 
-  // Add Driver form state
   const [newDrvName, setNewDrvName] = useState('');
   const [newDrvLicense, setNewDrvLicense] = useState('');
-  const [newDrvStation, setNewDrvStation] = useState<StationName>('Beograd Centar');
+  const [newDrvStation, setNewDrvStation] = useState('Beograd Centar');
   const [newDrvPhone, setNewDrvPhone] = useState('');
 
-  // Add Vehicle form state
   const [newVehModel, setNewVehModel] = useState('');
   const [newVehPlate, setNewVehPlate] = useState('');
-  const [newVehStation, setNewVehStation] = useState<StationName>('Beograd Centar');
+  const [newVehStation, setNewVehStation] = useState('Beograd Centar');
   const [newVehKm, setNewVehKm] = useState(0);
   const [newVehFuel, setNewVehFuel] = useState(100);
 
-  const [msgRecipient, setMsgRecipient] = useState<string>('ALL');
-  const [msgPriority, setMsgPriority] = useState<'Hitno' | 'Obaveštenje'>('Hitno');
+  const [msgRecipient, setMsgRecipient] = useState('ALL');
+  const [msgPriority, setMsgPriority] = useState('Hitno');
   const [msgTitle, setMsgTitle] = useState('');
   const [msgBody, setMsgBody] = useState('');
   const [msgSentOk, setMsgSentOk] = useState(false);
 
   const [aiLoading, setAiLoading] = useState(false);
-  const [aiError, setAiError] = useState<string | null>(null);
+  const [aiError, setAiError] = useState(null);
 
   const knownOperators = useMemo(
     () => Array.from(new Set(office.shifts.map((s) => s.clientOperator).filter(Boolean))),
@@ -157,7 +137,7 @@ export const DispatcherDesktopView: React.FC = () => {
     });
   }, [selectedDriver, formStart, formEnd, editingShiftId, office.shifts, office.ruleConfig]);
 
-  const openNewShiftModal = (preselectedDriverId?: string) => {
+  const openNewShiftModal = (preselectedDriverId) => {
     setEditingShiftId(undefined);
     setFormDriverId(preselectedDriverId || office.drivers[0]?.id || '');
     setFormOperator(knownOperators[0] || '');
@@ -174,7 +154,7 @@ export const DispatcherDesktopView: React.FC = () => {
     setModalOpen(true);
   };
 
-  const openReassignModal = (shift: Shift) => {
+  const openReassignModal = (shift) => {
     setEditingShiftId(shift.id);
     setFormDriverId(shift.driverId);
     setFormOperator(shift.clientOperator);
@@ -191,7 +171,7 @@ export const DispatcherDesktopView: React.FC = () => {
     setModalOpen(true);
   };
 
-  const handleSaveShift = (e: React.FormEvent) => {
+  const handleSaveShift = (e) => {
     e.preventDefault();
     setFormError(null);
 
@@ -224,7 +204,7 @@ export const DispatcherDesktopView: React.FC = () => {
     setModalOpen(false);
   };
 
-  const handleSendMessage = (e: React.FormEvent) => {
+  const handleSendMessage = (e) => {
     e.preventDefault();
     if (!msgTitle.trim() || !msgBody.trim()) return;
     sendDispatchMessage({
@@ -373,7 +353,7 @@ export const DispatcherDesktopView: React.FC = () => {
         setAiError(data.error || 'Greška prilikom poziva AI servisa.');
         return;
       }
-      const report: AiAuditReport = {
+      const report = {
         generatedAt: new Date().toISOString(),
         mode: 'gemini-anonymized',
         summary: data.summary,
@@ -381,7 +361,7 @@ export const DispatcherDesktopView: React.FC = () => {
         optimizationRecommendations: data.optimizationRecommendations || [],
       };
       setAiAuditReport(report);
-    } catch (err: unknown) {
+    } catch (err) {
       setAiError(
         err instanceof Error
           ? err.message
@@ -392,7 +372,7 @@ export const DispatcherDesktopView: React.FC = () => {
     }
   };
 
-  const handleAddDriverSubmit = (e: React.FormEvent) => {
+  const handleAddDriverSubmit = (e) => {
     e.preventDefault();
     if (!newDrvName.trim() || !newDrvLicense.trim()) return;
     addDriver({
@@ -406,7 +386,7 @@ export const DispatcherDesktopView: React.FC = () => {
     setNewDrvPhone('');
   };
 
-  const handleAddVehicleSubmit = (e: React.FormEvent) => {
+  const handleAddVehicleSubmit = (e) => {
     e.preventDefault();
     if (!newVehModel.trim() || !newVehPlate.trim()) return;
     addVehicle({
@@ -498,16 +478,14 @@ export const DispatcherDesktopView: React.FC = () => {
       {/* Sub-Navigation + Primary Action */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-200 pb-4">
         <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/70 rounded-lg">
-          {(
-            [
-              { id: 'schedule', label: 'Plan vožnje i Raspored' },
-              { id: 'messaging', label: 'Hitne poruke i Preraspored' },
-              { id: 'billing', label: 'Izveštaji i Obračun' },
-              { id: 'fleet-engine', label: 'Flota, Motor & Audit' },
-              { id: 'ai-audit', label: 'Kontrola izveštaja (Lokalno / AI)' },
-              { id: 'qr-access', label: 'Povezivanje kabine (QR)' },
-            ] as const
-          ).map((tab) => (
+          {[
+            { id: 'schedule', label: 'Plan vožnje i Raspored' },
+            { id: 'messaging', label: 'Hitne poruke i Preraspored' },
+            { id: 'billing', label: 'Izveštaji i Obračun' },
+            { id: 'fleet-engine', label: 'Flota, Motor & Audit' },
+            { id: 'ai-audit', label: 'Kontrola izveštaja (Lokalno / AI)' },
+            { id: 'qr-access', label: 'Povezivanje kabine (QR)' },
+          ].map((tab) => (
             <button
               key={tab.id}
               type="button"
@@ -564,7 +542,7 @@ export const DispatcherDesktopView: React.FC = () => {
               />
               <select
                 value={newDrvStation}
-                onChange={(e) => setNewDrvStation(e.target.value as StationName)}
+                onChange={(e) => setNewDrvStation(e.target.value)}
                 className="px-3 py-2 rounded-lg border border-slate-300 text-slate-900"
               >
                 {STATIONS.map((s) => (
@@ -605,101 +583,101 @@ export const DispatcherDesktopView: React.FC = () => {
                 Lokalni trezor je prazan. Dodajte prvog mašinovođu u formi iznad da biste planirali smene i sinhronizovali mobilnu kabinu.
               </div>
             ) : (
-            <div className="divide-y divide-slate-200">
-              {office.drivers.map((drv) => {
-                const rest = getDriverRemainingRestHours(drv, office.ruleConfig);
-                const drvShifts = office.shifts.filter((s) => s.driverId === drv.id);
+              <div className="divide-y divide-slate-200">
+                {office.drivers.map((drv) => {
+                  const rest = getDriverRemainingRestHours(drv, office.ruleConfig);
+                  const drvShifts = office.shifts.filter((s) => s.driverId === drv.id);
 
-                return (
-                  <div
-                    key={drv.id}
-                    className="py-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
-                  >
-                    <div className="lg:col-span-4 space-y-1">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="font-semibold text-slate-900">{drv.name}</span>
-                        <span
-                          className={`text-xs font-semibold ${
-                            drv.status === 'Dostupan'
-                              ? 'text-emerald-700'
-                              : drv.status === 'Na smeni'
-                              ? 'text-sky-700'
-                              : drv.status === 'Vanredno angažovan'
-                              ? 'text-red-700'
-                              : 'text-amber-700'
-                          }`}
-                        >
-                          {drv.status}
-                        </span>
-                      </div>
-                      <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
-                        <span className="font-mono">{drv.licenseCode}</span>
-                        <span>·</span>
-                        <span>Stanica: {drv.currentStation}</span>
-                        <span>·</span>
-                        <span>
-                          {rest.remaining > 0
-                            ? `Odmor još ${formatHours(rest.remaining)}`
-                            : 'Odmor ispunjen'}
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="lg:col-span-6 flex flex-wrap gap-2">
-                      {drvShifts.length === 0 ? (
-                        <span className="text-xs text-slate-400">
-                          Nema planiranih smena u ovom ciklusu
-                        </span>
-                      ) : (
-                        drvShifts.map((s) => (
-                          <button
-                            key={s.id}
-                            type="button"
-                            onClick={() => openReassignModal(s)}
-                            className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors cursor-pointer ${
-                              s.isEmergencyOverride
-                                ? 'bg-red-50 border-red-300 hover:bg-red-100'
-                                : s.status === 'U toku'
-                                ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100'
-                                : s.status === 'Planirana'
-                                ? 'bg-amber-50 border-amber-300 hover:bg-amber-100'
-                                : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                  return (
+                    <div
+                      key={drv.id}
+                      className="py-4 grid grid-cols-1 lg:grid-cols-12 gap-4 items-center"
+                    >
+                      <div className="lg:col-span-4 space-y-1">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="font-semibold text-slate-900">{drv.name}</span>
+                          <span
+                            className={`text-xs font-semibold ${
+                              drv.status === 'Dostupan'
+                                ? 'text-emerald-700'
+                                : drv.status === 'Na smeni'
+                                ? 'text-sky-700'
+                                : drv.status === 'Vanredno angažovan'
+                                ? 'text-red-700'
+                                : 'text-amber-700'
                             }`}
                           >
-                            <div className="font-semibold text-slate-900 flex items-center gap-1.5">
-                              <span className="font-mono">Voz {s.trainNumber}</span>
-                              <span>·</span>
-                              <span>
-                                {s.routeFrom} → {s.routeTo}
-                              </span>
-                            </div>
-                            <div className="text-slate-600 mt-0.5 flex items-center gap-2">
-                              <span className="font-mono">
-                                {formatTimeSr(s.startTime)}–{formatTimeSr(s.endTime)}
-                              </span>
-                              <span>·</span>
-                              <span>{s.clientOperator}</span>
-                              <span>·</span>
-                              <span className="font-semibold">{s.status}</span>
-                            </div>
-                          </button>
-                        ))
-                      )}
-                    </div>
+                            {drv.status}
+                          </span>
+                        </div>
+                        <div className="text-xs text-slate-500 flex flex-wrap items-center gap-2">
+                          <span className="font-mono">{drv.licenseCode}</span>
+                          <span>·</span>
+                          <span>Stanica: {drv.currentStation}</span>
+                          <span>·</span>
+                          <span>
+                            {rest.remaining > 0
+                              ? `Odmor još ${formatHours(rest.remaining)}`
+                              : 'Odmor ispunjen'}
+                          </span>
+                        </div>
+                      </div>
 
-                    <div className="lg:col-span-2 flex justify-start lg:justify-end">
-                      <button
-                        type="button"
-                        onClick={() => openNewShiftModal(drv.id)}
-                        className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-800 whitespace-nowrap cursor-pointer"
-                      >
-                        + Dodeli smenu
-                      </button>
+                      <div className="lg:col-span-6 flex flex-wrap gap-2">
+                        {drvShifts.length === 0 ? (
+                          <span className="text-xs text-slate-400">
+                            Nema planiranih smena u ovom ciklusu
+                          </span>
+                        ) : (
+                          drvShifts.map((s) => (
+                            <button
+                              key={s.id}
+                              type="button"
+                              onClick={() => openReassignModal(s)}
+                              className={`text-left px-3 py-2 rounded-lg border text-xs transition-colors cursor-pointer ${
+                                s.isEmergencyOverride
+                                  ? 'bg-red-50 border-red-300 hover:bg-red-100'
+                                  : s.status === 'U toku'
+                                  ? 'bg-emerald-50 border-emerald-300 hover:bg-emerald-100'
+                                  : s.status === 'Planirana'
+                                  ? 'bg-amber-50 border-amber-300 hover:bg-amber-100'
+                                  : 'bg-slate-50 border-slate-200 hover:bg-slate-100'
+                              }`}
+                            >
+                              <div className="font-semibold text-slate-900 flex items-center gap-1.5">
+                                <span className="font-mono">Voz {s.trainNumber}</span>
+                                <span>·</span>
+                                <span>
+                                  {s.routeFrom} → {s.routeTo}
+                                </span>
+                              </div>
+                              <div className="text-slate-600 mt-0.5 flex items-center gap-2">
+                                <span className="font-mono">
+                                  {formatTimeSr(s.startTime)}–{formatTimeSr(s.endTime)}
+                                </span>
+                                <span>·</span>
+                                <span>{s.clientOperator}</span>
+                                <span>·</span>
+                                <span className="font-semibold">{s.status}</span>
+                              </div>
+                            </button>
+                          ))
+                        )}
+                      </div>
+
+                      <div className="lg:col-span-2 flex justify-start lg:justify-end">
+                        <button
+                          type="button"
+                          onClick={() => openNewShiftModal(drv.id)}
+                          className="px-3 py-1.5 rounded-lg border border-slate-300 hover:bg-slate-100 text-xs font-semibold text-slate-800 whitespace-nowrap cursor-pointer"
+                        >
+                          + Dodeli smenu
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
             )}
           </section>
         </div>
@@ -739,7 +717,7 @@ export const DispatcherDesktopView: React.FC = () => {
                 Prioritet
               </label>
               <div className="grid grid-cols-2 gap-2">
-                {(['Hitno', 'Obaveštenje'] as const).map((prio) => (
+                {['Hitno', 'Obaveštenje'].map((prio) => (
                   <button
                     key={prio}
                     type="button"
@@ -1214,7 +1192,7 @@ export const DispatcherDesktopView: React.FC = () => {
               />
               <select
                 value={newVehStation}
-                onChange={(e) => setNewVehStation(e.target.value as StationName)}
+                onChange={(e) => setNewVehStation(e.target.value)}
                 className="px-2.5 py-2 rounded-lg border border-slate-300 bg-white text-slate-900"
               >
                 {STATIONS.map((s) => (
@@ -1305,22 +1283,22 @@ export const DispatcherDesktopView: React.FC = () => {
                   <span>Klasifikator telemetrije</span>
                 </h2>
                 <div className="flex items-center gap-1 p-1 bg-slate-100 rounded-lg text-xs">
-                  {(
-                    ['SVE', 'Redovan rad', 'Zastoj / Tehnički kvar', 'Flota i oprema'] as const
-                  ).map((cat) => (
-                    <button
-                      key={cat}
-                      type="button"
-                      onClick={() => setTelemetryFilter(cat)}
-                      className={`px-2 py-1 rounded-md font-medium cursor-pointer ${
-                        telemetryFilter === cat
-                          ? 'bg-white text-slate-900 shadow-sm'
-                          : 'text-slate-600'
-                      }`}
-                    >
-                      {cat === 'SVE' ? 'Sve' : cat}
-                    </button>
-                  ))}
+                  {['SVE', 'Redovan rad', 'Zastoj / Tehnički kvar', 'Flota i oprema'].map(
+                    (cat) => (
+                      <button
+                        key={cat}
+                        type="button"
+                        onClick={() => setTelemetryFilter(cat)}
+                        className={`px-2 py-1 rounded-md font-medium cursor-pointer ${
+                          telemetryFilter === cat
+                            ? 'bg-white text-slate-900 shadow-sm'
+                            : 'text-slate-600'
+                        }`}
+                      >
+                        {cat === 'SVE' ? 'Sve' : cat}
+                      </button>
+                    )
+                  )}
                 </div>
               </div>
               <div className="space-y-2 max-h-[280px] overflow-y-auto">
@@ -1644,7 +1622,7 @@ export const DispatcherDesktopView: React.FC = () => {
                 </label>
                 <select
                   value={formFrom}
-                  onChange={(e) => setFormFrom(e.target.value as StationName)}
+                  onChange={(e) => setFormFrom(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900"
                 >
                   {STATIONS.map((s) => (
@@ -1661,7 +1639,7 @@ export const DispatcherDesktopView: React.FC = () => {
                 </label>
                 <select
                   value={formTo}
-                  onChange={(e) => setFormTo(e.target.value as StationName)}
+                  onChange={(e) => setFormTo(e.target.value)}
                   className="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm text-slate-900"
                 >
                   {STATIONS.map((s) => (

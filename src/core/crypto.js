@@ -1,7 +1,7 @@
 const KEY_SALT = new TextEncoder().encode('zp-hybrid-e2ee-v1');
-const keyCache = new Map<string, CryptoKey>();
+const keyCache = new Map();
 
-async function deriveAesKey(passphrase: string): Promise<CryptoKey> {
+async function deriveAesKey(passphrase) {
   const cached = keyCache.get(passphrase);
   if (cached) return cached;
 
@@ -30,7 +30,7 @@ async function deriveAesKey(passphrase: string): Promise<CryptoKey> {
   return aesKey;
 }
 
-function toBase64(bytes: Uint8Array): string {
+function toBase64(bytes) {
   let bin = '';
   for (let i = 0; i < bytes.length; i += 1) {
     bin += String.fromCharCode(bytes[i]);
@@ -38,7 +38,7 @@ function toBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
-function fromBase64(b64: string): Uint8Array {
+function fromBase64(b64) {
   const bin = atob(b64);
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i += 1) {
@@ -47,10 +47,7 @@ function fromBase64(b64: string): Uint8Array {
   return out;
 }
 
-export async function encryptEnvelopePayload(
-  passphrase: string,
-  payload: unknown
-): Promise<{ iv: string; ciphertext: string; payloadBytes: number }> {
+export async function encryptEnvelopePayload(passphrase, payload) {
   const key = await deriveAesKey(passphrase);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encoded = new TextEncoder().encode(JSON.stringify(payload));
@@ -63,19 +60,15 @@ export async function encryptEnvelopePayload(
   };
 }
 
-export async function decryptEnvelopePayload<T = unknown>(
-  passphrase: string,
-  ivB64: string,
-  ciphertextB64: string
-): Promise<T> {
+export async function decryptEnvelopePayload(passphrase, ivB64, ciphertextB64) {
   const key = await deriveAesKey(passphrase);
   const iv = fromBase64(ivB64);
   const cipherBytes = fromBase64(ciphertextB64);
   const decrypted = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: iv as BufferSource },
+    { name: 'AES-GCM', iv },
     key,
-    cipherBytes as BufferSource
+    cipherBytes
   );
   const json = new TextDecoder().decode(decrypted);
-  return JSON.parse(json) as T;
+  return JSON.parse(json);
 }

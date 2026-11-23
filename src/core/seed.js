@@ -1,6 +1,4 @@
-import { NodeLocalData, SystemState } from './types';
-
-export function createEmptyNodeData(): NodeLocalData {
+export function createEmptyNodeData() {
   return {
     drivers: [],
     shifts: [],
@@ -21,20 +19,14 @@ export function createEmptyNodeData(): NodeLocalData {
   };
 }
 
-export function createTenantNodes(): {
-  mobileNode: NodeLocalData;
-  officeNode: NodeLocalData;
-} {
+export function createTenantNodes() {
   return {
     mobileNode: createEmptyNodeData(),
     officeNode: createEmptyNodeData(),
   };
 }
 
-export function createInitialSystemState(
-  tenantId = '',
-  pathwayToken = ''
-): SystemState {
+export function createInitialSystemState(tenantId = '', pathwayToken = '') {
   const { mobileNode, officeNode } = createTenantNodes();
 
   return {

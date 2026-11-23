@@ -1,39 +1,26 @@
-import {
-  Driver,
-  RuleCheckDetail,
-  RuleConfig,
-  RuleEvaluationResult,
-  Shift,
-  ShiftSegment,
-} from './types';
-
-export function hoursBetween(startIso: string, endIso: string): number {
+export function hoursBetween(startIso, endIso) {
   const ms = new Date(endIso).getTime() - new Date(startIso).getTime();
   return Math.max(0, Number((ms / (1000 * 60 * 60)).toFixed(2)));
 }
 
-export function getRequiredRestHours(driver: Driver, config: RuleConfig): number {
+export function getRequiredRestHours(driver, config) {
   return driver.lastShiftEndedAwayFromBase
     ? config.minRestAwayHours
     : config.minRestHomeHours;
 }
 
 export function getDriverRemainingRestHours(
-  driver: Driver,
-  config: RuleConfig,
-  referenceIso: string = new Date().toISOString()
-): { required: number; elapsed: number; remaining: number } {
+  driver,
+  config,
+  referenceIso = new Date().toISOString()
+) {
   const required = getRequiredRestHours(driver, config);
   const elapsed = hoursBetween(driver.lastShiftEndTime, referenceIso);
   const remaining = Math.max(0, Number((required - elapsed).toFixed(2)));
   return { required, elapsed, remaining };
 }
 
-export function calculateShiftDurations(
-  startTime: string,
-  endTime: string,
-  segments?: ShiftSegment[]
-): { drivingHours: number; totalShiftHours: number } {
+export function calculateShiftDurations(startTime, endTime, segments) {
   const totalShiftHours = hoursBetween(startTime, endTime);
   if (segments && segments.length > 0) {
     const drivingHours = Number(
@@ -51,7 +38,7 @@ export function calculateShiftDurations(
   };
 }
 
-export function hasNightHours(startIso: string, endIso: string): boolean {
+export function hasNightHours(startIso, endIso) {
   const start = new Date(startIso);
   const end = new Date(endIso);
   const cur = new Date(start);
@@ -65,19 +52,9 @@ export function hasNightHours(startIso: string, endIso: string): boolean {
   return false;
 }
 
-export function evaluateShiftAssignment(params: {
-  driver: Driver;
-  candidateShift: {
-    id?: string;
-    startTime: string;
-    endTime: string;
-    segments?: ShiftSegment[];
-  };
-  existingShifts: Shift[];
-  config: RuleConfig;
-}): RuleEvaluationResult {
+export function evaluateShiftAssignment(params) {
   const { driver, candidateShift, existingShifts, config } = params;
-  const checks: RuleCheckDetail[] = [];
+  const checks = [];
 
   // 1. Chronological & Total Shift Duration check (max 12h)
   const { drivingHours, totalShiftHours } = calculateShiftDurations(

@@ -14,44 +14,22 @@ import {
   hasNightHours,
 } from './ruleEngine';
 import { createInitialSystemState, createTenantNodes } from './seed';
-import {
-  AiAuditReport,
-  AuditLogEntry,
-  ClientOperator,
-  CompanyVehicle,
-  DispatchMessage,
-  Driver,
-  GatewayTelemetrySnapshot,
-  NodeLocalData,
-  RuleConfig,
-  RuleEvaluationResult,
-  SegmentView,
-  Shift,
-  ShiftSegment,
-  StationName,
-  SyncEvent,
-  SystemState,
-  TelemetryClassification,
-  TelemetryLog,
-  TelemetryType,
-  VehicleEquipment,
-} from './types';
 
-function mobileStorageKey(tenantId: string) {
+function mobileStorageKey(tenantId) {
   return `zp_live_mobile_v1_${tenantId || 'unconfigured'}`;
 }
 
-function officeStorageKey(tenantId: string) {
+function officeStorageKey(tenantId) {
   return `zp_live_office_v1_${tenantId || 'unconfigured'}`;
 }
 
 const META_STORAGE_KEY = 'zp_live_meta_v1';
 
-function uid(prefix: string): string {
+function uid(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 6)}`;
 }
 
-function classifyTelemetry(type: TelemetryType): TelemetryClassification {
+function classifyTelemetry(type) {
   switch (type) {
     case 'ZASTOJ_KVAR':
       return 'Zastoj / Tehnički kvar';
@@ -68,11 +46,11 @@ function classifyTelemetry(type: TelemetryType): TelemetryClassification {
 function readUrlBootParams() {
   if (typeof window === 'undefined') {
     return {
-      segment: null as SegmentView | null,
-      tenant: null as string | null,
-      pathway: null as string | null,
-      driver: null as string | null,
-      e2ee: null as string | null,
+      segment: null,
+      tenant: null,
+      pathway: null,
+      driver: null,
+      e2ee: null,
       lock: false,
     };
   }
@@ -89,7 +67,7 @@ function readUrlBootParams() {
   return {
     segment:
       seg === 'landing' || seg === 'mobile' || seg === 'admin' || seg === 'dispatcher'
-        ? (seg as SegmentView)
+        ? seg
         : null,
     tenant: params.get('tenant'),
     pathway: params.get('pathway'),
@@ -99,7 +77,7 @@ function readUrlBootParams() {
   };
 }
 
-function enforceRollingWindow(node: NodeLocalData, limit: number): NodeLocalData {
+function enforceRollingWindow(node, limit) {
   return {
     ...node,
     telemetryLogs: node.telemetryLogs.slice(0, limit),
@@ -113,17 +91,14 @@ function enforceRollingWindow(node: NodeLocalData, limit: number): NodeLocalData
   };
 }
 
-function loadTenantNodes(tenantId: string): {
-  mobileNode: NodeLocalData;
-  officeNode: NodeLocalData;
-} {
+function loadTenantNodes(tenantId) {
   try {
     const mobRaw = localStorage.getItem(mobileStorageKey(tenantId));
     const offRaw = localStorage.getItem(officeStorageKey(tenantId));
     if (mobRaw && offRaw) {
       return {
-        mobileNode: JSON.parse(mobRaw) as NodeLocalData,
-        officeNode: JSON.parse(offRaw) as NodeLocalData,
+        mobileNode: JSON.parse(mobRaw),
+        officeNode: JSON.parse(offRaw),
       };
     }
   } catch {
@@ -132,9 +107,9 @@ function loadTenantNodes(tenantId: string): {
   return createTenantNodes();
 }
 
-function loadInitialState(): SystemState {
+function loadInitialState() {
   const boot = readUrlBootParams();
-  let meta: Record<string, unknown> = {};
+  let meta = {};
   try {
     const raw = localStorage.getItem(META_STORAGE_KEY);
     if (raw) meta = JSON.parse(raw);
@@ -184,7 +159,7 @@ function loadInitialState(): SystemState {
       meta.activeSegment === 'mobile' ||
       meta.activeSegment === 'admin' ||
       meta.activeSegment === 'dispatcher'
-        ? (meta.activeSegment as SegmentView)
+        ? meta.activeSegment
         : 'landing'),
     activeTenantId: tenantId,
     activePathwayToken: pathwayToken,
@@ -209,17 +184,12 @@ function loadInitialState(): SystemState {
   };
 }
 
-function applyIncomingEventToNode(
-  node: NodeLocalData,
-  event: SyncEvent,
-  isMobileRollingNode: boolean,
-  rollingLimit: number
-): NodeLocalData {
+function applyIncomingEventToNode(node, event, isMobileRollingNode, rollingLimit) {
   if (node.processedEventIds.includes(event.id)) {
     return node;
   }
 
-  let next: NodeLocalData = {
+  let next = {
     ...node,
     processedEventIds: [...node.processedEventIds, event.id],
     lastSyncedAt: new Date().toISOString(),
@@ -229,17 +199,17 @@ function applyIncomingEventToNode(
   const nowIso = new Date().toISOString();
 
   if (event.actionType === 'DRIVER_ADDED') {
-    const drv = p.driver as Driver;
+    const drv = p.driver;
     if (!next.drivers.some((d) => d.id === drv.id)) {
       next = { ...next, drivers: [...next.drivers, drv] };
     }
   } else if (event.actionType === 'VEHICLE_ADDED') {
-    const veh = p.vehicle as CompanyVehicle;
+    const veh = p.vehicle;
     if (!next.vehicles.some((v) => v.id === veh.id)) {
       next = { ...next, vehicles: [...next.vehicles, veh] };
     }
   } else if (event.actionType === 'SHIFT_ASSIGNED') {
-    const incomingShift = p.shift as Shift;
+    const incomingShift = p.shift;
     const drv = next.drivers.find((d) => d.id === incomingShift.driverId);
     const exists = next.shifts.some((s) => s.id === incomingShift.id);
     const nextShifts = exists
@@ -280,16 +250,16 @@ function applyIncomingEventToNode(
       }
     }
   } else if (event.actionType === 'DISPATCH_MESSAGE') {
-    const msg = p.message as DispatchMessage;
+    const msg = p.message;
     if (!next.messages.some((m) => m.id === msg.id)) {
       next = { ...next, messages: [msg, ...next.messages] };
     }
   } else if (event.actionType === 'RULE_CONFIG_UPDATED') {
-    const cfg = p.config as RuleConfig;
+    const cfg = p.config;
     next = { ...next, ruleConfig: cfg };
   } else if (event.actionType === 'SHIFT_STARTED') {
-    const shiftId = p.shiftId as string;
-    const logItem = { ...(p.telemetry as TelemetryLog), pendingSync: false, syncedAt: nowIso };
+    const shiftId = p.shiftId;
+    const logItem = { ...p.telemetry, pendingSync: false, syncedAt: nowIso };
     const targetShift = next.shifts.find((s) => s.id === shiftId);
     const drv = targetShift ? next.drivers.find((d) => d.id === targetShift.driverId) : undefined;
 
@@ -328,10 +298,10 @@ function applyIncomingEventToNode(
       next.telemetryLogs = [logItem, ...next.telemetryLogs];
     }
   } else if (event.actionType === 'SHIFT_ENDED') {
-    const shiftId = p.shiftId as string;
-    const logItem = { ...(p.telemetry as TelemetryLog), pendingSync: false, syncedAt: nowIso };
-    const endStation = p.station as StationName;
-    const endedAt = p.endedAt as string;
+    const shiftId = p.shiftId;
+    const logItem = { ...p.telemetry, pendingSync: false, syncedAt: nowIso };
+    const endStation = p.station;
+    const endedAt = p.endedAt;
     const targetShift = next.shifts.find((s) => s.id === shiftId);
 
     next.shifts = next.shifts.map((s) =>
@@ -354,14 +324,14 @@ function applyIncomingEventToNode(
       next.telemetryLogs = [logItem, ...next.telemetryLogs];
     }
   } else if (event.actionType === 'TELEMETRY_LOGGED') {
-    const logItem = { ...(p.telemetry as TelemetryLog), pendingSync: false, syncedAt: nowIso };
+    const logItem = { ...p.telemetry, pendingSync: false, syncedAt: nowIso };
     if (!next.telemetryLogs.some((t) => t.id === logItem.id)) {
       next.telemetryLogs = [logItem, ...next.telemetryLogs];
     }
   } else if (event.actionType === 'VEHICLE_HANDOVER') {
-    const vehicleUpdate = p.vehicle as NodeLocalData['vehicles'][number];
-    const logItem = { ...(p.telemetry as TelemetryLog), pendingSync: false, syncedAt: nowIso };
-    const auditItem = p.audit as AuditLogEntry;
+    const vehicleUpdate = p.vehicle;
+    const logItem = { ...p.telemetry, pendingSync: false, syncedAt: nowIso };
+    const auditItem = p.audit;
     next.vehicles = next.vehicles.map((v) =>
       v.id === vehicleUpdate.id ? vehicleUpdate : v
     );
@@ -372,10 +342,10 @@ function applyIncomingEventToNode(
       next.auditLogs = [auditItem, ...next.auditLogs];
     }
   } else if (event.actionType === 'MESSAGE_ACK') {
-    const messageId = p.messageId as string;
-    const driverId = p.driverId as string;
-    const ackedAt = p.ackedAt as string;
-    const auditItem = p.audit as AuditLogEntry;
+    const messageId = p.messageId;
+    const driverId = p.driverId;
+    const ackedAt = p.ackedAt;
+    const auditItem = p.audit;
     next.messages = next.messages.map((m) =>
       m.id === messageId
         ? {
@@ -395,100 +365,11 @@ function applyIncomingEventToNode(
   return isMobileRollingNode ? enforceRollingWindow(next, rollingLimit) : next;
 }
 
-export interface CreateOrReassignShiftInput {
-  shiftId?: string;
-  driverId: string;
-  clientOperator: ClientOperator;
-  routeFrom: StationName;
-  routeTo: StationName;
-  trainNumber: string;
-  locomotiveCode: string;
-  startTime: string;
-  endTime: string;
-  notes?: string;
-  emergencyOverrideReason?: string;
-}
+const SystemContext = createContext(null);
 
-export interface VehicleHandoverInput {
-  vehicleId: string;
-  driverId: string;
-  action: 'PREUZIMANJE' | 'PREDAJA';
-  station: StationName;
-  mileageKm: number;
-  fuelPercent: number;
-  conditionNote: string;
-  equipment: VehicleEquipment;
-}
-
-interface SystemContextValue {
-  state: SystemState;
-  gatewaySnapshot: GatewayTelemetrySnapshot;
-  syncError: string | null;
-  setActiveSegment: (seg: SegmentView) => void;
-  switchTenant: (tenantId: string, pathwayToken: string) => void;
-  configureConnection: (input: {
-    tenantId: string;
-    pathwayToken: string;
-    fleetPassphrase?: string;
-  }) => void;
-  acceptDesktopStart: () => void;
-  acceptMobileStart: () => void;
-  reopenStartScreen: (target: 'desktop' | 'mobile') => void;
-  unlockMobileE2ee: (passphrase: string) => void;
-  setActiveMobileDriverId: (driverId: string) => void;
-  toggleOfflineTunnelMode: () => void;
-  toggleOfficeOfflineMode: () => void;
-  updateFleetPassphrase: (passphrase: string) => void;
-  updateRollingWindowSize: (size: number) => void;
-  triggerGatewaySync: () => Promise<void>;
-  addDriver: (input: {
-    name: string;
-    licenseCode: string;
-    homeStation: StationName;
-    phone: string;
-  }) => void;
-  addVehicle: (input: {
-    model: string;
-    plate: string;
-    currentStation: StationName;
-    mileageKm: number;
-    nextServiceKm: number;
-    fuelPercent: number;
-  }) => void;
-  assignOrReassignShift: (input: CreateOrReassignShiftInput) => {
-    ok: boolean;
-    evaluation: RuleEvaluationResult;
-  };
-  startShiftFromMobile: (shiftId: string) => void;
-  endShiftFromMobile: (shiftId: string) => void;
-  logFieldTelemetry: (input: {
-    driverId: string;
-    shiftId?: string;
-    type: TelemetryType;
-    station: StationName;
-    route?: string;
-    trainNumber?: string;
-    delayMinutes?: number;
-    description: string;
-  }) => void;
-  submitVehicleHandover: (input: VehicleHandoverInput) => void;
-  sendDispatchMessage: (input: {
-    recipientDriverId: string;
-    title: string;
-    body: string;
-    priority: 'Hitno' | 'Obaveštenje';
-  }) => void;
-  acknowledgeMessage: (messageId: string, driverId: string) => void;
-  updateRuleConfig: (config: RuleConfig) => void;
-  setAiAuditReport: (report: AiAuditReport | null) => void;
-  purgeLocalData: () => void;
-}
-
-const SystemContext = createContext<SystemContextValue | null>(null);
-
-export function SystemProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<SystemState>(loadInitialState);
-  const [gatewaySnapshot, setGatewaySnapshot] = useState<GatewayTelemetrySnapshot>({
+export function SystemProvider({ children }) {
+  const [state, setState] = useState(loadInitialState);
+  const [gatewaySnapshot, setGatewaySnapshot] = useState({
     tenantId: state.activeTenantId,
     envelopes: [],
     queuedMobile: 0,
@@ -496,7 +377,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     ackedRollingCount: 0,
     rollingWindowLimit: 20,
   });
-  const [syncError, setSyncError] = useState<string | null>(null);
+  const [syncError, setSyncError] = useState(null);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -506,7 +387,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!state.activeTenantId) return;
     try {
-      let link = document.querySelector('link[rel="manifest"]') as HTMLLinkElement | null;
+      let link = document.querySelector('link[rel="manifest"]');
       if (!link) {
         link = document.createElement('link');
         link.rel = 'manifest';
@@ -551,15 +432,15 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
   }, [state]);
 
   useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
+    const onStorage = (e) => {
       if (!e.newValue) return;
       const curTenant = stateRef.current.activeTenantId;
       try {
         if (e.key === mobileStorageKey(curTenant)) {
-          const mobileNode = JSON.parse(e.newValue) as NodeLocalData;
+          const mobileNode = JSON.parse(e.newValue);
           setState((prev) => ({ ...prev, mobileNode }));
         } else if (e.key === officeStorageKey(curTenant)) {
-          const officeNode = JSON.parse(e.newValue) as NodeLocalData;
+          const officeNode = JSON.parse(e.newValue);
           setState((prev) => ({ ...prev, officeNode }));
         }
       } catch {
@@ -591,7 +472,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         }
       );
       if (resp.ok) {
-        const data = (await resp.json()) as GatewayTelemetrySnapshot;
+        const data = await resp.json();
         setGatewaySnapshot(data);
         setSyncError((prev) =>
           prev?.includes('Licenca') || prev?.includes('Pathway') || prev?.includes('Nepoznat')
@@ -627,14 +508,14 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         'Content-Type': 'application/json',
         'X-Pathway-Token': cur.activePathwayToken,
       };
-      let gatewayNotice: string | null = null;
+      let gatewayNotice = null;
 
       // 1. Mobile Outbox -> Encrypted Publish to Tenant Pathway
       if (!cur.offlineTunnelMode && !cur.e2eeLockedOnMobile) {
         const pendingMobile = cur.mobileNode.outbox.filter(
           (e) => e.deliveryState === 'local_only'
         );
-        const publishedIds: string[] = [];
+        const publishedIds = [];
 
         for (const ev of pendingMobile) {
           const { iv, ciphertext } = await encryptEnvelopePayload(key, ev);
@@ -684,7 +565,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         const pendingOffice = cur.officeNode.outbox.filter(
           (e) => e.deliveryState === 'local_only'
         );
-        const publishedIds: string[] = [];
+        const publishedIds = [];
 
         for (const ev of pendingOffice) {
           const { iv, ciphertext } = await encryptEnvelopePayload(key, ev);
@@ -732,16 +613,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         if (pullResp.ok) {
           const pullData = await pullResp.json();
           const envelopes = pullData.envelopes || [];
-          const ackIds: string[] = [];
-          const decryptedEvents: SyncEvent[] = [];
+          const ackIds = [];
+          const decryptedEvents = [];
 
           for (const env of envelopes) {
             try {
-              const ev = await decryptEnvelopePayload<SyncEvent>(
-                key,
-                env.iv,
-                env.ciphertext
-              );
+              const ev = await decryptEnvelopePayload(key, env.iv, env.ciphertext);
               decryptedEvents.push(ev);
               ackIds.push(env.id);
             } catch {
@@ -763,7 +640,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               }
               const ackSet = new Set(ackIds);
               const nextMobileOutbox = prev.mobileNode.outbox.map((o) =>
-                ackSet.has(o.id) ? { ...o, deliveryState: 'acked' as const } : o
+                ackSet.has(o.id) ? { ...o, deliveryState: 'acked' } : o
               );
               return {
                 ...prev,
@@ -795,16 +672,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         if (pullResp.ok) {
           const pullData = await pullResp.json();
           const envelopes = pullData.envelopes || [];
-          const ackIds: string[] = [];
-          const decryptedEvents: SyncEvent[] = [];
+          const ackIds = [];
+          const decryptedEvents = [];
 
           for (const env of envelopes) {
             try {
-              const ev = await decryptEnvelopePayload<SyncEvent>(
-                key,
-                env.iv,
-                env.ciphertext
-              );
+              const ev = await decryptEnvelopePayload(key, env.iv, env.ciphertext);
               decryptedEvents.push(ev);
               ackIds.push(env.id);
             } catch {
@@ -826,7 +699,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
               }
               const ackSet = new Set(ackIds);
               const nextOfficeOutbox = prev.officeNode.outbox.map((o) =>
-                ackSet.has(o.id) ? { ...o, deliveryState: 'acked' as const } : o
+                ackSet.has(o.id) ? { ...o, deliveryState: 'acked' } : o
               );
               const resolvedMobDriver =
                 prev.activeMobileDriverId &&
@@ -887,7 +760,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id);
   }, [triggerGatewaySync]);
 
-  const setActiveSegment = (seg: SegmentView) => {
+  const setActiveSegment = (seg) => {
     setState((prev) => ({ ...prev, activeSegment: seg }));
     try {
       const url = new URL(window.location.href);
@@ -898,11 +771,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const configureConnection: SystemContextValue['configureConnection'] = ({
-    tenantId,
-    pathwayToken,
-    fleetPassphrase,
-  }) => {
+  const configureConnection = ({ tenantId, pathwayToken, fleetPassphrase }) => {
     const cleanTenant = tenantId.trim();
     const cleanToken = pathwayToken.trim();
     const { mobileNode, officeNode } = loadTenantNodes(cleanTenant);
@@ -921,7 +790,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const switchTenant = (tenantId: string, pathwayToken: string) => {
+  const switchTenant = (tenantId, pathwayToken) => {
     configureConnection({ tenantId, pathwayToken });
   };
 
@@ -933,7 +802,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, mobileStartAccepted: true }));
   };
 
-  const reopenStartScreen = (target: 'desktop' | 'mobile') => {
+  const reopenStartScreen = (target) => {
     setState((prev) =>
       target === 'desktop'
         ? { ...prev, desktopStartAccepted: false }
@@ -941,7 +810,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     );
   };
 
-  const unlockMobileE2ee = (passphrase: string) => {
+  const unlockMobileE2ee = (passphrase) => {
     setState((prev) => ({
       ...prev,
       fleetPassphrase: passphrase.trim(),
@@ -949,7 +818,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const setActiveMobileDriverId = (driverId: string) => {
+  const setActiveMobileDriverId = (driverId) => {
     setState((prev) => ({ ...prev, activeMobileDriverId: driverId }));
   };
 
@@ -961,11 +830,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     setState((prev) => ({ ...prev, officeOfflineMode: !prev.officeOfflineMode }));
   };
 
-  const updateFleetPassphrase = (passphrase: string) => {
+  const updateFleetPassphrase = (passphrase) => {
     setState((prev) => ({ ...prev, fleetPassphrase: passphrase }));
   };
 
-  const updateRollingWindowSize = (size: number) => {
+  const updateRollingWindowSize = (size) => {
     const bounded = Math.max(5, Math.min(100, size));
     setState((prev) => ({
       ...prev,
@@ -974,11 +843,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     }));
   };
 
-  const addDriver: SystemContextValue['addDriver'] = (input) => {
+  const addDriver = (input) => {
     setState((prev) => {
       const office = prev.officeNode;
       const nowIso = new Date().toISOString();
-      const newDriver: Driver = {
+      const newDriver = {
         id: uid('drv'),
         name: input.name.trim(),
         licenseCode: input.licenseCode.trim(),
@@ -990,7 +859,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         phone: input.phone.trim(),
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: office.nextSeq,
         originNode: 'office',
@@ -1014,11 +883,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const addVehicle: SystemContextValue['addVehicle'] = (input) => {
+  const addVehicle = (input) => {
     setState((prev) => {
       const office = prev.officeNode;
       const nowIso = new Date().toISOString();
-      const newVehicle: CompanyVehicle = {
+      const newVehicle = {
         id: uid('veh'),
         model: input.model.trim(),
         plate: input.plate.trim().toUpperCase(),
@@ -1038,7 +907,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         lastHandoverAt: nowIso,
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: office.nextSeq,
         originNode: 'office',
@@ -1061,7 +930,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const assignOrReassignShift = (input: CreateOrReassignShiftInput) => {
+  const assignOrReassignShift = (input) => {
     const office = state.officeNode;
     const driver = office.drivers.find((d) => d.id === input.driverId);
     if (!driver) {
@@ -1096,7 +965,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
     const startMs = new Date(input.startTime).getTime();
     const shiftId = input.shiftId || uid('sm');
-    const segments: ShiftSegment[] = [
+    const segments = [
       {
         id: `${shiftId}-seg-1`,
         type: 'priprema',
@@ -1178,7 +1047,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     const isOverridden = !evaluation.allowed && Boolean(overrideReason);
     const night = hasNightHours(input.startTime, input.endTime);
 
-    const newShift: Shift = {
+    const newShift = {
       id: shiftId,
       driverId: driver.id,
       clientOperator: input.clientOperator.trim(),
@@ -1210,11 +1079,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
 
       const nextDrivers = curOffice.drivers.map((d) =>
         d.id === driver.id && isOverridden
-          ? { ...d, status: 'Vanredno angažovan' as const }
+          ? { ...d, status: 'Vanredno angažovan' }
           : d
       );
 
-      const newAudits: AuditLogEntry[] = [...curOffice.auditLogs];
+      const newAudits = [...curOffice.auditLogs];
       if (isOverridden) {
         newAudits.unshift({
           id: uid('aud'),
@@ -1235,7 +1104,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         });
       }
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: curOffice.nextSeq,
         originNode: 'office',
@@ -1282,7 +1151,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, evaluation };
   };
 
-  const startShiftFromMobile = (shiftId: string) => {
+  const startShiftFromMobile = (shiftId) => {
     setState((prev) => {
       const mob = prev.mobileNode;
       const shift = mob.shifts.find((s) => s.id === shiftId);
@@ -1290,7 +1159,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
       const driver = mob.drivers.find((d) => d.id === shift.driverId);
       const nowIso = new Date().toISOString();
 
-      const logItem: TelemetryLog = {
+      const logItem = {
         id: uid('tel'),
         timestamp: nowIso,
         driverId: shift.driverId,
@@ -1313,7 +1182,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
           })
         : null;
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: mob.nextSeq,
         originNode: 'mobile',
@@ -1367,7 +1236,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const endShiftFromMobile = (shiftId: string) => {
+  const endShiftFromMobile = (shiftId) => {
     setState((prev) => {
       const mob = prev.mobileNode;
       const shift = mob.shifts.find((s) => s.id === shiftId);
@@ -1379,7 +1248,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         shift.segments
       );
 
-      const logItem: TelemetryLog = {
+      const logItem = {
         id: uid('tel'),
         timestamp: nowIso,
         driverId: shift.driverId,
@@ -1393,7 +1262,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         pendingSync: true,
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: mob.nextSeq,
         originNode: 'mobile',
@@ -1437,11 +1306,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const logFieldTelemetry: SystemContextValue['logFieldTelemetry'] = (input) => {
+  const logFieldTelemetry = (input) => {
     setState((prev) => {
       const mob = prev.mobileNode;
       const nowIso = new Date().toISOString();
-      const item: TelemetryLog = {
+      const item = {
         id: uid('tel'),
         timestamp: nowIso,
         driverId: input.driverId,
@@ -1456,7 +1325,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         pendingSync: true,
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: mob.nextSeq,
         originNode: 'mobile',
@@ -1481,7 +1350,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const submitVehicleHandover = (input: VehicleHandoverInput) => {
+  const submitVehicleHandover = (input) => {
     setState((prev) => {
       const mob = prev.mobileNode;
       const nowIso = new Date().toISOString();
@@ -1509,7 +1378,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
           ? 'U upotrebi'
           : 'Parkirano';
 
-      const updatedVehicle: CompanyVehicle = {
+      const updatedVehicle = {
         ...vehicle,
         currentStation: input.station,
         status: nextStatus,
@@ -1521,7 +1390,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         lastHandoverAt: nowIso,
       };
 
-      const logItem: TelemetryLog = {
+      const logItem = {
         id: uid('tel'),
         timestamp: nowIso,
         driverId: input.driverId,
@@ -1535,7 +1404,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         pendingSync: true,
       };
 
-      const auditItem: AuditLogEntry = {
+      const auditItem = {
         id: uid('aud'),
         timestamp: nowIso,
         actor: driver.name,
@@ -1545,7 +1414,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         } vozila ${vehicle.plate} (${input.station}, ${input.mileageKm} km).`,
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: mob.nextSeq,
         originNode: 'mobile',
@@ -1578,16 +1447,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const sendDispatchMessage = (input: {
-    recipientDriverId: string;
-    title: string;
-    body: string;
-    priority: 'Hitno' | 'Obaveštenje';
-  }) => {
+  const sendDispatchMessage = (input) => {
     setState((prev) => {
       const office = prev.officeNode;
       const nowIso = new Date().toISOString();
-      const newMsg: DispatchMessage = {
+      const newMsg = {
         id: uid('msg'),
         recipientDriverId: input.recipientDriverId,
         senderName: 'Dispečerski centar',
@@ -1598,7 +1462,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         acknowledgedAtByDriver: {},
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: office.nextSeq,
         originNode: 'office',
@@ -1621,12 +1485,12 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const acknowledgeMessage = (messageId: string, driverId: string) => {
+  const acknowledgeMessage = (messageId, driverId) => {
     setState((prev) => {
       const mob = prev.mobileNode;
       const nowIso = new Date().toISOString();
       const drv = mob.drivers.find((d) => d.id === driverId);
-      const auditItem: AuditLogEntry = {
+      const auditItem = {
         id: uid('aud'),
         timestamp: nowIso,
         actor: drv?.name || driverId,
@@ -1634,7 +1498,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
         details: `Potvrđen prijem dispečerske poruke (${messageId}).`,
       };
 
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: mob.nextSeq,
         originNode: 'mobile',
@@ -1670,11 +1534,11 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const updateRuleConfig = (config: RuleConfig) => {
+  const updateRuleConfig = (config) => {
     setState((prev) => {
       const office = prev.officeNode;
       const nowIso = new Date().toISOString();
-      const syncEvent: SyncEvent = {
+      const syncEvent = {
         id: uid('ev'),
         seq: office.nextSeq,
         originNode: 'office',
@@ -1707,7 +1571,7 @@ export function SystemProvider({ children }: { children: React.ReactNode }) {
     });
   };
 
-  const setAiAuditReport = (report: AiAuditReport | null) => {
+  const setAiAuditReport = (report) => {
     setState((prev) => ({ ...prev, aiAuditReport: report }));
   };
 

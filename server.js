@@ -14,72 +14,17 @@ const PORT = Number(process.env.PORT || 3000);
 const LICENSE_HMAC_SECRET =
   process.env.LICENSE_SIGNING_SECRET || crypto.randomBytes(32).toString('hex');
 
-interface GatewayEnvelope {
-  id: string;
-  tenantId: string;
-  sourceNode: 'mobile' | 'office';
-  targetNode: 'mobile' | 'office';
-  seq: number;
-  iv: string;
-  ciphertext: string;
-  payloadBytes: number;
-  createdAt: string;
-  status: 'queued' | 'acked';
-  ackedAt?: string;
-}
-
-interface TenantRecord {
-  tenantId: string;
-  clientName: string;
-  pathwayPrefix: string;
-  pathwayToken: string;
-  status: 'active' | 'suspended';
-  createdAt: string;
-  isolationMode: 'strict-pathway-token';
-}
-
-interface LicenseRecord {
-  licenseId: string;
-  tenantId: string;
-  clientName: string;
-  plan: 'Standard' | 'Flota Pro' | 'Enterprise';
-  maxDrivers: number;
-  modules: string[];
-  issuedAt: string;
-  expiresAt: string;
-  status: 'active' | 'revoked';
-  signature: string;
-  licenseKey: string;
-}
-
-interface ApiLogEntry {
-  id: string;
-  timestamp: string;
-  method: string;
-  path: string;
-  tenantId: string;
-  statusCode: number;
-  latencyMs: number;
-  payloadBytes: number;
-  note: string;
-}
-
 const MAX_ACKED_ROLLING_WINDOW = 20;
 const MAX_QUEUED_PER_TENANT = 200;
 const MAX_API_LOGS = 150;
 
 // Isolated tenant buffers: tenantId -> GatewayEnvelope[]
-const tenantBuffers = new Map<string, GatewayEnvelope[]>();
-const tenantRegistry = new Map<string, TenantRecord>();
-const licenseRegistry = new Map<string, LicenseRecord>();
-const apiLogs: ApiLogEntry[] = [];
+const tenantBuffers = new Map();
+const tenantRegistry = new Map();
+const licenseRegistry = new Map();
+const apiLogs = [];
 
-function signLicensePayload(
-  tenantId: string,
-  plan: string,
-  maxDrivers: number,
-  expiresAt: string
-): { signature: string; licenseKey: string } {
+function signLicensePayload(tenantId, plan, maxDrivers, expiresAt) {
   const payload = `${tenantId}|${plan}|${maxDrivers}|${expiresAt}`;
   const signature = crypto
     .createHmac('sha256', LICENSE_HMAC_SECRET)
@@ -102,7 +47,7 @@ function clearServerState() {
 
 clearServerState();
 
-function getTenantBuffer(tenantId: string): GatewayEnvelope[] {
+function getTenantBuffer(tenantId) {
   let buf = tenantBuffers.get(tenantId);
   if (!buf) {
     buf = [];
@@ -111,21 +56,21 @@ function getTenantBuffer(tenantId: string): GatewayEnvelope[] {
   return buf;
 }
 
-function pruneTenantBuffer(tenantId: string) {
+function pruneTenantBuffer(tenantId) {
   const buf = getTenantBuffer(tenantId);
   const queued = buf.filter((e) => e.status === 'queued').slice(-MAX_QUEUED_PER_TENANT);
   const acked = buf.filter((e) => e.status === 'acked').slice(-MAX_ACKED_ROLLING_WINDOW);
   tenantBuffers.set(tenantId, [...queued, ...acked]);
 }
 
-function safeTokenCompare(a: string, b: string): boolean {
+function safeTokenCompare(a, b) {
   const bufA = Buffer.from(a);
   const bufB = Buffer.from(b);
   if (bufA.length !== bufB.length) return false;
   return crypto.timingSafeEqual(bufA, bufB);
 }
 
-function findActiveLicenseForTenant(tenantId: string): LicenseRecord | null {
+function findActiveLicenseForTenant(tenantId) {
   const nowMs = Date.now();
   for (const lic of licenseRegistry.values()) {
     if (
@@ -139,7 +84,7 @@ function findActiveLicenseForTenant(tenantId: string): LicenseRecord | null {
   return null;
 }
 
-function recordApiLog(entry: Omit<ApiLogEntry, 'id' | 'timestamp'>) {
+function recordApiLog(entry) {
   apiLogs.unshift({
     id: `log-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`,
     timestamp: new Date().toISOString(),
@@ -207,7 +152,7 @@ async function startServer() {
   });
 
   // Tenant pathway verification middleware
-  const requireTenantPathway: express.RequestHandler = (req, res, next) => {
+  const requireTenantPathway = (req, res, next) => {
     const tenantId = req.params.tenantId;
     const tenant = tenantRegistry.get(tenantId);
     if (!tenant) {
@@ -313,14 +258,14 @@ async function startServer() {
       return;
     }
 
-    const idSet = new Set(envelopeIds.filter((id): id is string => typeof id === 'string'));
+    const idSet = new Set(envelopeIds.filter((id) => typeof id === 'string'));
     const nowIso = new Date().toISOString();
     let ackedCount = 0;
 
     const updated = getTenantBuffer(tenantId).map((env) => {
       if (idSet.has(env.id) && env.targetNode === ackedBy && env.status === 'queued') {
         ackedCount += 1;
-        return { ...env, status: 'acked' as const, ackedAt: nowIso };
+        return { ...env, status: 'acked', ackedAt: nowIso };
       }
       return env;
     });
@@ -422,7 +367,7 @@ async function startServer() {
     const pathwayToken = `pw_${crypto.randomBytes(12).toString('hex')}`;
     const nowIso = new Date().toISOString();
 
-    const record: TenantRecord = {
+    const record = {
       tenantId,
       clientName,
       pathwayPrefix: `/api/t/${tenantId}/gateway`,
@@ -477,7 +422,7 @@ async function startServer() {
       res.status(400).json({ error: 'Izabrani klijent ne postoji.' });
       return;
     }
-    const validPlan: LicenseRecord['plan'] =
+    const validPlan =
       plan === 'Enterprise' || plan === 'Flota Pro' ? plan : 'Standard';
     const driversCount = Math.max(1, Math.min(5000, Number(maxDrivers || 20)));
     const days = Math.max(1, Math.min(1825, Number(durationDays || 365)));
@@ -489,7 +434,7 @@ async function startServer() {
       expiresAt
     );
 
-    const license: LicenseRecord = {
+    const license = {
       licenseId: `LIC-${Date.now().toString(36).toUpperCase()}`,
       tenantId: tenant.tenantId,
       clientName: tenant.clientName,
@@ -513,7 +458,7 @@ async function startServer() {
       res.status(404).json({ error: 'Licenca nije pronađena.' });
       return;
     }
-    const updated: LicenseRecord = {
+    const updated = {
       ...lic,
       status: lic.status === 'active' ? 'revoked' : 'active',
     };
@@ -598,7 +543,7 @@ async function startServer() {
   });
 
   app.post('/api/admin/diagnostics/self-test', (_req, res) => {
-    const results: Array<{ check: string; ok: boolean; detail: string }> = [];
+    const results = [];
     const tenants = Array.from(tenantRegistry.values());
     results.push({
       check: 'Izolacija klijentskih bafera',
@@ -716,7 +661,7 @@ async function startServer() {
 
       const rawText = (response.text ?? '{}').trim();
       res.json(JSON.parse(rawText));
-    } catch (err: unknown) {
+    } catch (err) {
       const message =
         err instanceof Error ? err.message : 'Nepoznata greška pri pozivu Gemini API-ja.';
       res.status(500).json({ error: `Gemini AI provera nije uspela: ${message}` });
@@ -897,7 +842,7 @@ async function startServer() {
         </p>
         <div class="actions">
           <a class="btn-primary" href="#preuzimanje">Preuzmi Desktop aplikaciju</a>
-          <a class="btn-secondary" href="/">Interaktivni pregled sistema</a>
+          <a class="btn-secondary" href="/">Otvori aplikaciju</a>
         </div>
       </div>
       <div>

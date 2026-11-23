@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Download, Smartphone } from 'lucide-react';
 import { usePWAInstall } from '../core/usePWAInstall';
 
-export const PWAInstallButton: React.FC<{ tenantName?: string }> = ({ tenantName }) => {
+export const PWAInstallButton = ({ tenantName }) => {
   const { isInstallable, isInstalled, isIOS, install } = usePWAInstall();
   const [showGuide, setShowGuide] = useState(false);
 

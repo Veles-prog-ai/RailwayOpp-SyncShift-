@@ -1,13 +1,12 @@
 import { calculateShiftDurations } from './ruleEngine';
-import { AiAuditReport, NodeLocalData } from './types';
 
 /**
  * Zero-token deterministic local audit that runs entirely on the client's
  * desktop / Docker vault without sending any data externally.
  */
-export function runLocalDeterministicAudit(node: NodeLocalData): AiAuditReport {
-  const anomalies: AiAuditReport['anomalies'] = [];
-  const recommendations: AiAuditReport['optimizationRecommendations'] = [];
+export function runLocalDeterministicAudit(node) {
+  const anomalies = [];
+  const recommendations = [];
 
   // 1. Check vehicles for service proximity, low fuel, missing equipment, or sudden fuel drop notes
   for (const v of node.vehicles) {
@@ -113,7 +112,7 @@ export function runLocalDeterministicAudit(node: NodeLocalData): AiAuditReport {
 /**
  * Strips driver names & phone numbers before optional Gemini audit.
  */
-export function buildAnonymizedAuditPayload(node: NodeLocalData) {
+export function buildAnonymizedAuditPayload(node) {
   const driverAlias = new Map(
     node.drivers.map((d, i) => [d.id, `MASINOVODJA-${String(i + 1).padStart(2, '0')}`])
   );

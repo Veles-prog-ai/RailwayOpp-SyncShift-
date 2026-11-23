@@ -6,13 +6,12 @@
 import React from 'react';
 import { RotateCcw } from 'lucide-react';
 import { SystemProvider, useSystem } from './core/store';
-import { SegmentView } from './core/types';
 import { DriverMobileView } from './segments/driver-mobile/DriverMobileView';
 import { ServerAdminView } from './segments/server-admin/ServerAdminView';
 import { DispatcherDesktopView } from './segments/dispatcher-desktop/DispatcherDesktopView';
 import { LandingServerView } from './segments/landing/LandingServerView';
 
-const SEGMENTS: Array<{ id: SegmentView; label: string }> = [
+const SEGMENTS = [
   { id: 'landing', label: 'Početna (Server)' },
   { id: 'mobile', label: 'Mobilna aplikacija (Mašinovođa)' },
   { id: 'admin', label: 'Server & Admin konzola' },

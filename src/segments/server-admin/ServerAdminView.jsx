@@ -14,17 +14,9 @@ import {
 } from 'lucide-react';
 import { apiFetch, apiUrl } from '../../core/apiClient';
 import { useSystem } from '../../core/store';
-import {
-  LicenseInfo,
-  ServerApiLog,
-  ServerDiagnostics,
-  TenantInfo,
-} from '../../core/types';
 import { formatDateTimeSr } from '../../core/utils';
 
-type AdminTab = 'tenants' | 'licenses' | 'gateway' | 'diagnostics';
-
-export const ServerAdminView: React.FC = () => {
+export const ServerAdminView = () => {
   const {
     state,
     gatewaySnapshot,
@@ -33,31 +25,23 @@ export const ServerAdminView: React.FC = () => {
     triggerGatewaySync,
   } = useSystem();
 
-  const [adminTab, setAdminTab] = useState<AdminTab>('tenants');
+  const [adminTab, setAdminTab] = useState('tenants');
 
-  // Service Provider Admin server state
-  const [tenants, setTenants] = useState<TenantInfo[]>([]);
-  const [licenses, setLicenses] = useState<LicenseInfo[]>([]);
-  const [apiLogs, setApiLogs] = useState<ServerApiLog[]>([]);
-  const [apiTenantFilter, setApiTenantFilter] = useState<string>('ALL');
-  const [diagnostics, setDiagnostics] = useState<ServerDiagnostics | null>(null);
-  const [selfTestResults, setSelfTestResults] = useState<
-    Array<{ check: string; ok: boolean; detail: string }>
-  >([]);
+  const [tenants, setTenants] = useState([]);
+  const [licenses, setLicenses] = useState([]);
+  const [apiLogs, setApiLogs] = useState([]);
+  const [apiTenantFilter, setApiTenantFilter] = useState('ALL');
+  const [diagnostics, setDiagnostics] = useState(null);
+  const [selfTestResults, setSelfTestResults] = useState([]);
 
-  // Create Tenant form
   const [newClientName, setNewClientName] = useState('');
 
-  // License Generator form
   const [licTenantId, setLicTenantId] = useState(state.activeTenantId);
-  const [licPlan, setLicPlan] = useState<'Standard' | 'Flota Pro' | 'Enterprise'>('Flota Pro');
+  const [licPlan, setLicPlan] = useState('Flota Pro');
   const [licMaxDrivers, setLicMaxDrivers] = useState(40);
   const [licDays, setLicDays] = useState(365);
   const [verifyKeyInput, setVerifyKeyInput] = useState('');
-  const [verifyResult, setVerifyResult] = useState<{
-    valid: boolean;
-    reason: string;
-  } | null>(null);
+  const [verifyResult, setVerifyResult] = useState(null);
 
   const fetchAdminData = useCallback(async () => {
     try {
@@ -69,7 +53,7 @@ export const ServerAdminView: React.FC = () => {
       ]);
       if (tResp.ok) {
         const d = await tResp.json();
-        const nextTenants: TenantInfo[] = d.tenants || [];
+        const nextTenants = d.tenants || [];
         setTenants(nextTenants);
         setLicTenantId((prev) =>
           prev && nextTenants.some((t) => t.tenantId === prev)
@@ -101,7 +85,7 @@ export const ServerAdminView: React.FC = () => {
   const activeTenantObj =
     tenants.find((t) => t.tenantId === state.activeTenantId) || tenants[0];
 
-  const handleCreateTenant = async (e: React.FormEvent) => {
+  const handleCreateTenant = async (e) => {
     e.preventDefault();
     if (!newClientName.trim()) return;
     const resp = await apiFetch('/api/admin/tenants', {
@@ -119,7 +103,7 @@ export const ServerAdminView: React.FC = () => {
     }
   };
 
-  const handleRotateToken = async (tenantId: string) => {
+  const handleRotateToken = async (tenantId) => {
     const resp = await apiFetch(
       `/api/admin/tenants/${encodeURIComponent(tenantId)}/rotate-token`,
       {
@@ -135,7 +119,7 @@ export const ServerAdminView: React.FC = () => {
     }
   };
 
-  const handleGenerateLicense = async (e: React.FormEvent) => {
+  const handleGenerateLicense = async (e) => {
     e.preventDefault();
     if (!licTenantId) return;
     const resp = await apiFetch('/api/admin/licenses/generate', {
@@ -158,7 +142,7 @@ export const ServerAdminView: React.FC = () => {
     }
   };
 
-  const handleToggleLicense = async (licenseId: string) => {
+  const handleToggleLicense = async (licenseId) => {
     await apiFetch(`/api/admin/licenses/${encodeURIComponent(licenseId)}/toggle-status`, {
       method: 'POST',
     });
@@ -166,7 +150,7 @@ export const ServerAdminView: React.FC = () => {
     void triggerGatewaySync();
   };
 
-  const handleVerifyLicense = async (e: React.FormEvent) => {
+  const handleVerifyLicense = async (e) => {
     e.preventDefault();
     const resp = await apiFetch('/api/admin/licenses/verify', {
       method: 'POST',
@@ -258,14 +242,12 @@ export const ServerAdminView: React.FC = () => {
 
       {/* Admin Console Sub-Tabs (Strictly Service Provider Tools Only) */}
       <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-200/70 rounded-lg w-fit">
-        {(
-          [
-            { id: 'tenants', label: 'Klijenti & Izolovane Putanje' },
-            { id: 'licenses', label: 'Generator Licenci' },
-            { id: 'gateway', label: 'API Log & E2EE Gateway' },
-            { id: 'diagnostics', label: 'Dijagnostika Servera' },
-          ] as const
-        ).map((t) => (
+        {[
+          { id: 'tenants', label: 'Klijenti & Izolovane Putanje' },
+          { id: 'licenses', label: 'Generator Licenci' },
+          { id: 'gateway', label: 'API Log & E2EE Gateway' },
+          { id: 'diagnostics', label: 'Dijagnostika Servera' },
+        ].map((t) => (
           <button
             key={t.id}
             type="button"
@@ -318,63 +300,63 @@ export const ServerAdminView: React.FC = () => {
                       </tr>
                     ) : (
                       tenants.map((t) => {
-                      const isCurrent = t.tenantId === state.activeTenantId;
-                      return (
-                        <tr
-                          key={t.tenantId}
-                          className={isCurrent ? 'bg-slate-50 font-medium' : ''}
-                        >
-                          <td className="py-3 pr-3">
-                            <div className="font-semibold text-slate-900">
-                              {t.clientName}
-                            </div>
-                            <div className="font-mono text-[11px] text-slate-500">
-                              {t.tenantId}
-                            </div>
-                          </td>
-                          <td className="py-3 pr-3 font-mono text-[11px] text-slate-700">
-                            <div>{t.pathwayPrefix}</div>
-                            <div className="text-slate-400">
-                              Token: {t.pathwayToken.slice(0, 12)}...
-                            </div>
-                          </td>
-                          <td className="py-3 pr-3">
-                            <span
-                              className={`font-semibold ${
-                                t.licenseStatus === 'Aktivna'
-                                  ? 'text-emerald-700'
-                                  : 'text-red-700'
-                              }`}
-                            >
-                              {t.licenseStatus}
-                            </span>
-                          </td>
-                          <td className="py-3 pr-3 text-right font-mono tabular-nums">
-                            {t.queuedCount || 0} / {t.ackedCount || 0}
-                          </td>
-                          <td className="py-3 text-right space-x-2 whitespace-nowrap">
-                            <button
-                              type="button"
-                              onClick={() => switchTenant(t.tenantId, t.pathwayToken)}
-                              className={`px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer ${
-                                isCurrent
-                                  ? 'bg-slate-900 text-white border-slate-900'
-                                  : 'border-slate-300 text-slate-700 hover:bg-slate-100'
-                              }`}
-                            >
-                              {isCurrent ? 'Aktivan' : 'Aktiviraj'}
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => void handleRotateToken(t.tenantId)}
-                              className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer"
-                            >
-                              Rotiraj token
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })
+                        const isCurrent = t.tenantId === state.activeTenantId;
+                        return (
+                          <tr
+                            key={t.tenantId}
+                            className={isCurrent ? 'bg-slate-50 font-medium' : ''}
+                          >
+                            <td className="py-3 pr-3">
+                              <div className="font-semibold text-slate-900">
+                                {t.clientName}
+                              </div>
+                              <div className="font-mono text-[11px] text-slate-500">
+                                {t.tenantId}
+                              </div>
+                            </td>
+                            <td className="py-3 pr-3 font-mono text-[11px] text-slate-700">
+                              <div>{t.pathwayPrefix}</div>
+                              <div className="text-slate-400">
+                                Token: {t.pathwayToken.slice(0, 12)}...
+                              </div>
+                            </td>
+                            <td className="py-3 pr-3">
+                              <span
+                                className={`font-semibold ${
+                                  t.licenseStatus === 'Aktivna'
+                                    ? 'text-emerald-700'
+                                    : 'text-red-700'
+                                }`}
+                              >
+                                {t.licenseStatus}
+                              </span>
+                            </td>
+                            <td className="py-3 pr-3 text-right font-mono tabular-nums">
+                              {t.queuedCount || 0} / {t.ackedCount || 0}
+                            </td>
+                            <td className="py-3 text-right space-x-2 whitespace-nowrap">
+                              <button
+                                type="button"
+                                onClick={() => switchTenant(t.tenantId, t.pathwayToken)}
+                                className={`px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer ${
+                                  isCurrent
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'border-slate-300 text-slate-700 hover:bg-slate-100'
+                                }`}
+                              >
+                                {isCurrent ? 'Aktivan' : 'Aktiviraj'}
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => void handleRotateToken(t.tenantId)}
+                                className="px-2.5 py-1 rounded border border-slate-300 hover:bg-slate-100 text-[11px] font-semibold text-slate-700 cursor-pointer"
+                              >
+                                Rotiraj token
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
                     )}
                   </tbody>
                 </table>
@@ -503,9 +485,7 @@ export const ServerAdminView: React.FC = () => {
                   </label>
                   <select
                     value={licPlan}
-                    onChange={(e) =>
-                      setLicPlan(e.target.value as 'Standard' | 'Flota Pro' | 'Enterprise')
-                    }
+                    onChange={(e) => setLicPlan(e.target.value)}
                     className="w-full px-2.5 py-2 rounded-lg border border-slate-300 text-xs text-slate-900"
                   >
                     <option value="Standard">Standard</option>
@@ -609,47 +589,47 @@ export const ServerAdminView: React.FC = () => {
                       </tr>
                     ) : (
                       licenses.map((lic) => (
-                      <tr key={lic.licenseId}>
-                        <td className="py-2.5 pr-3 font-mono font-semibold text-slate-900">
-                          {lic.licenseKey}
-                        </td>
-                        <td className="py-2.5 pr-3">
-                          <div className="font-semibold text-slate-800">
-                            {lic.clientName}
-                          </div>
-                          <div className="text-slate-500">
-                            {lic.plan} · do {lic.maxDrivers} vozača
-                          </div>
-                        </td>
-                        <td className="py-2.5 pr-3 font-mono text-slate-600">
-                          {new Date(lic.expiresAt).toLocaleDateString('sr-Latn-RS')}
-                        </td>
-                        <td className="py-2.5 pr-3 font-semibold">
-                          <span
-                            className={
-                              lic.status === 'active'
-                                ? 'text-emerald-700'
-                                : 'text-red-700'
-                            }
-                          >
-                            {lic.status === 'active' ? 'Aktivna' : 'Opozvana'}
-                          </span>
-                        </td>
-                        <td className="py-2.5 text-right">
-                          <button
-                            type="button"
-                            onClick={() => void handleToggleLicense(lic.licenseId)}
-                            className={`px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer ${
-                              lic.status === 'active'
-                                ? 'border-red-300 text-red-700 hover:bg-red-50'
-                                : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
-                            }`}
-                          >
-                            {lic.status === 'active' ? 'Opozovi' : 'Aktiviraj'}
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                        <tr key={lic.licenseId}>
+                          <td className="py-2.5 pr-3 font-mono font-semibold text-slate-900">
+                            {lic.licenseKey}
+                          </td>
+                          <td className="py-2.5 pr-3">
+                            <div className="font-semibold text-slate-800">
+                              {lic.clientName}
+                            </div>
+                            <div className="text-slate-500">
+                              {lic.plan} · do {lic.maxDrivers} vozača
+                            </div>
+                          </td>
+                          <td className="py-2.5 pr-3 font-mono text-slate-600">
+                            {new Date(lic.expiresAt).toLocaleDateString('sr-Latn-RS')}
+                          </td>
+                          <td className="py-2.5 pr-3 font-semibold">
+                            <span
+                              className={
+                                lic.status === 'active'
+                                  ? 'text-emerald-700'
+                                  : 'text-red-700'
+                              }
+                            >
+                              {lic.status === 'active' ? 'Aktivna' : 'Opozvana'}
+                            </span>
+                          </td>
+                          <td className="py-2.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => void handleToggleLicense(lic.licenseId)}
+                              className={`px-2.5 py-1 rounded border text-[11px] font-semibold cursor-pointer ${
+                                lic.status === 'active'
+                                  ? 'border-red-300 text-red-700 hover:bg-red-50'
+                                  : 'border-emerald-300 text-emerald-700 hover:bg-emerald-50'
+                              }`}
+                            >
+                              {lic.status === 'active' ? 'Opozovi' : 'Aktiviraj'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))
                     )}
                   </tbody>
                 </table>

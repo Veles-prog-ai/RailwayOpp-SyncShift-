@@ -11,29 +11,18 @@ import {
   ShieldCheck,
   UserCheck,
 } from 'lucide-react';
-import { Driver } from '../core/types';
 
-interface ClientQrProvisionerProps {
-  tenantId: string;
-  pathwayToken: string;
-  fleetPassphrase: string;
-  drivers: Driver[];
-  onUpdatePassphrase: (nextPassphrase: string) => void;
-}
-
-export const ClientQrProvisioner: React.FC<ClientQrProvisionerProps> = ({
+export const ClientQrProvisioner = ({
   tenantId,
   pathwayToken,
   fleetPassphrase,
   drivers,
   onUpdatePassphrase,
 }) => {
-  const [selectedDriverId, setSelectedDriverId] = useState<string>('ALL');
-  const [linkMode, setLinkMode] = useState<'local-fragment' | 'strict-split'>(
-    'local-fragment'
-  );
+  const [selectedDriverId, setSelectedDriverId] = useState('ALL');
+  const [linkMode, setLinkMode] = useState('local-fragment');
   const [passphraseInput, setPassphraseInput] = useState(fleetPassphrase);
-  const [qrDataUrl, setQrDataUrl] = useState<string>('');
+  const [qrDataUrl, setQrDataUrl] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -105,7 +94,7 @@ export const ClientQrProvisioner: React.FC<ClientQrProvisionerProps> = ({
     onUpdatePassphrase(nextKey);
   };
 
-  const handleApplyPassphrase = (e: React.FormEvent) => {
+  const handleApplyPassphrase = (e) => {
     e.preventDefault();
     if (passphraseInput.trim().length >= 4) {
       onUpdatePassphrase(passphraseInput.trim());
@@ -164,9 +153,7 @@ export const ClientQrProvisioner: React.FC<ClientQrProvisionerProps> = ({
               </label>
               <select
                 value={linkMode}
-                onChange={(e) =>
-                  setLinkMode(e.target.value as 'local-fragment' | 'strict-split')
-                }
+                onChange={(e) => setLinkMode(e.target.value)}
                 className="w-full px-3 py-2 rounded-lg border border-slate-300 bg-white text-sm text-slate-900"
               >
                 <option value="local-fragment">

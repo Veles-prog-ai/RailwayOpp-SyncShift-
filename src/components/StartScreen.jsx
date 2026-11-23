@@ -10,19 +10,7 @@ import {
   Smartphone,
 } from 'lucide-react';
 
-interface StartScreenProps {
-  mode: 'desktop' | 'mobile';
-  tenantId: string;
-  pathwayToken: string;
-  fleetPassphrase: string;
-  onConfirmAndStart: (config: {
-    tenantId: string;
-    pathwayToken: string;
-    fleetPassphrase?: string;
-  }) => void;
-}
-
-export const StartScreen: React.FC<StartScreenProps> = ({
+export const StartScreen = ({
   mode,
   tenantId,
   pathwayToken,
@@ -34,8 +22,8 @@ export const StartScreen: React.FC<StartScreenProps> = ({
   const [tokenInput, setTokenInput] = useState(pathwayToken);
   const [keyInput, setKeyInput] = useState(fleetPassphrase);
   const [policyAccepted, setPolicyAccepted] = useState(false);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [activeDocTab, setActiveDocTab] = useState<'privacy' | 'guide'>('privacy');
+  const [errorMsg, setErrorMsg] = useState(null);
+  const [activeDocTab, setActiveDocTab] = useState('privacy');
 
   const handleGenerateLocalKey = () => {
     const bytes = new Uint8Array(9);
@@ -44,7 +32,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
     setKeyInput(`ZP-LOKAL-${hex.toUpperCase()}`);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = (e) => {
     e.preventDefault();
     setErrorMsg(null);
     if (!policyAccepted) {
@@ -109,7 +97,7 @@ export const StartScreen: React.FC<StartScreenProps> = ({
         </p>
       </div>
 
-      {/* Tabbed / Stacked Privacy Policy + User Guide */}
+      {/* Tabbed Privacy Policy + User Guide */}
       <div
         className={`rounded-2xl border overflow-hidden ${
           isMobile
